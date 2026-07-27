@@ -122,9 +122,14 @@ func fetchNearest(client *http.Client, lat, lng float64, top int) ([]apiPU, erro
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("status %d", resp.StatusCode)
 	}
-	var results []apiPU
-	if err := json.NewDecoder(resp.Body).Decode(&results); err != nil {
+	// The API wraps results in an envelope with the query point echoed
+	// back as "origin" — {"origin": {...}, "results": [...]} — rather
+	// than returning a bare array.
+	var body struct {
+		Results []apiPU `json:"results"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, err
 	}
-	return results, nil
+	return body.Results, nil
 }
