@@ -53,3 +53,18 @@ export function changePassword(currentPassword: string, newPassword: string) {
 export function listAdmins() {
   return api.get<User[]>("/api/v1/admins");
 }
+
+// Always resolves — the endpoint intentionally reports the same generic
+// status regardless of whether a matching account was found.
+export function forgotPassword(usernameOrEmail: string) {
+  return api.post<{ status: string }>("/api/v1/auth/forgot-password", {
+    username_or_email: usernameOrEmail,
+  });
+}
+
+export function resetPassword(token: string, newPassword: string) {
+  return api.post<{ status: string }>("/api/v1/auth/reset-password", {
+    token,
+    new_password: newPassword,
+  });
+}

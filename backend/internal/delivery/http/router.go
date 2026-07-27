@@ -41,6 +41,8 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Post("/auth/login", h.Auth.Login)
 		r.Post("/auth/signup", h.Auth.Signup)
+		r.Post("/auth/forgot-password", h.Auth.ForgotPassword)
+		r.Post("/auth/reset-password", h.Auth.ResetPassword)
 
 		r.Group(func(r chi.Router) {
 			r.Use(appmw.Auth(tokens))

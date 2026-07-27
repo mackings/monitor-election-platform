@@ -106,6 +106,48 @@ func (h *AuthHandler) ListAdmins(w http.ResponseWriter, r *http.Request) {
 	httpresp.JSON(w, http.StatusOK, admins)
 }
 
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		UsernameOrEmail string `json:"username_or_email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := h.auth.ForgotPassword(r.Context(), body.UsernameOrEmail); err != nil {
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	// Always the same response, whether or not an account was found — this
+	// endpoint must not reveal which usernames/emails exist.
+	httpresp.JSON(w, http.StatusOK, map[string]string{
+		"status": "if an account with that username or email exists, a reset link has been sent",
+	})
+}
+
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Token       string `json:"token"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := h.auth.ResetPassword(r.Context(), body.Token, body.NewPassword); err != nil {
+		switch err {
+		case domain.ErrInvalidInput:
+			httpresp.Error(w, http.StatusBadRequest, "new password must be at least 8 characters")
+		case domain.ErrUnauthorized:
+			httpresp.Error(w, http.StatusUnauthorized, "reset link is invalid or has expired")
+		default:
+			httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "password_reset"})
+}
+
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		CurrentPassword string `json:"current_password"`

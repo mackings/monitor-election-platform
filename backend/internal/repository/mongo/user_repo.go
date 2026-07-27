@@ -12,18 +12,20 @@ import (
 )
 
 type userDoc struct {
-	ID             bson.ObjectID        `bson:"_id,omitempty"`
-	Name           string               `bson:"name"`
-	Phone          string               `bson:"phone"`
-	Email          string               `bson:"email,omitempty"`
-	Username       string               `bson:"username"`
-	PasswordHash   string               `bson:"password_hash"`
-	Role           domain.Role          `bson:"role"`
-	AssignedPUCode string               `bson:"assigned_pu_code,omitempty"`
-	Status         domain.OfficerStatus `bson:"status"`
-	LastLocation   *domain.Location     `bson:"last_location,omitempty"`
-	LastSeenAt     *time.Time           `bson:"last_seen_at,omitempty"`
-	CreatedAt      time.Time            `bson:"created_at"`
+	ID                  bson.ObjectID        `bson:"_id,omitempty"`
+	Name                string               `bson:"name"`
+	Phone               string               `bson:"phone"`
+	Email               string               `bson:"email,omitempty"`
+	Username            string               `bson:"username"`
+	PasswordHash        string               `bson:"password_hash"`
+	Role                domain.Role          `bson:"role"`
+	AssignedPUCode      string               `bson:"assigned_pu_code,omitempty"`
+	Status              domain.OfficerStatus `bson:"status"`
+	LastLocation        *domain.Location     `bson:"last_location,omitempty"`
+	LastSeenAt          *time.Time           `bson:"last_seen_at,omitempty"`
+	CreatedAt           time.Time            `bson:"created_at"`
+	ResetToken          string               `bson:"reset_token,omitempty"`
+	ResetTokenExpiresAt *time.Time           `bson:"reset_token_expires_at,omitempty"`
 }
 
 func (d *userDoc) toDomain() *domain.User {
@@ -86,6 +88,18 @@ func (r *UserRepository) FindByUsername(ctx context.Context, username string) (*
 	return doc.toDomain(), nil
 }
 
+func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
+	var doc userDoc
+	err := r.col.FindOne(ctx, bson.M{"email": email}).Decode(&doc)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return doc.toDomain(), nil
+}
+
 func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User, error) {
 	oid, err := bson.ObjectIDFromHex(id)
 	if err != nil {
@@ -139,6 +153,45 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, userID, newPassword
 		return domain.ErrNotFound
 	}
 	_, err = r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": bson.M{"password_hash": newPasswordHash}})
+	return err
+}
+
+func (r *UserRepository) SetResetToken(ctx context.Context, userID, token string, expiresAt time.Time) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	_, err = r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": bson.M{
+		"reset_token":            token,
+		"reset_token_expires_at": expiresAt,
+	}})
+	return err
+}
+
+func (r *UserRepository) FindByResetToken(ctx context.Context, token string) (*domain.User, error) {
+	var doc userDoc
+	err := r.col.FindOne(ctx, bson.M{
+		"reset_token":            token,
+		"reset_token_expires_at": bson.M{"$gt": time.Now()},
+	}).Decode(&doc)
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return nil, domain.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return doc.toDomain(), nil
+}
+
+func (r *UserRepository) ResetPassword(ctx context.Context, userID, newPasswordHash string) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	_, err = r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{
+		"$set":   bson.M{"password_hash": newPasswordHash},
+		"$unset": bson.M{"reset_token": "", "reset_token_expires_at": ""},
+	})
 	return err
 }
 

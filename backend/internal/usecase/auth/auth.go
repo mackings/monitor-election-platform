@@ -3,16 +3,20 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log"
 	"math/big"
 	"strings"
+	"time"
 
 	"monitor/backend/internal/domain"
 	"monitor/backend/pkg/hash"
 	"monitor/backend/pkg/jwtutil"
 )
+
+const resetTokenTTL = time.Hour
 
 type Usecase struct {
 	users  domain.UserRepository
@@ -188,6 +192,73 @@ func (u *Usecase) ChangePassword(ctx context.Context, userID, currentPassword, n
 		return err
 	}
 	return u.users.UpdatePassword(ctx, userID, newHash)
+}
+
+// ForgotPassword looks the user up by username or email (whichever the
+// caller typed) and, if found and they have an email on file, sends a
+// reset link. It always returns nil regardless of whether a match was
+// found — the handler always reports the same generic "check your email"
+// message, so this endpoint can't be used to enumerate valid
+// usernames/emails.
+func (u *Usecase) ForgotPassword(ctx context.Context, usernameOrEmail string) error {
+	user, err := u.users.FindByUsername(ctx, usernameOrEmail)
+	if err != nil {
+		user, err = u.users.FindByEmail(ctx, usernameOrEmail)
+	}
+	if err != nil || user.Email == "" {
+		return nil
+	}
+
+	token, genErr := generateResetToken()
+	if genErr != nil {
+		return genErr
+	}
+	if err := u.users.SetResetToken(ctx, user.ID, token, time.Now().Add(resetTokenTTL)); err != nil {
+		return err
+	}
+
+	sendErr := u.mailer.Send(ctx, user.Email, "Reset your Election Monitor password", resetEmailHTML(user.Name, token, u.appURL))
+	if sendErr != nil && !errors.Is(sendErr, domain.ErrMailerNotConfigured) {
+		log.Printf("auth: failed to email password reset to %s: %v", user.Email, sendErr)
+	}
+	return nil
+}
+
+// ResetPassword completes the forgot-password flow: a valid, unexpired
+// token (looked up directly, never trusting a client-supplied user id)
+// proves the caller controls the account's email.
+func (u *Usecase) ResetPassword(ctx context.Context, token, newPassword string) error {
+	if len(newPassword) < 8 {
+		return domain.ErrInvalidInput
+	}
+	user, err := u.users.FindByResetToken(ctx, token)
+	if err != nil {
+		return domain.ErrUnauthorized
+	}
+	newHash, err := hash.Hash(newPassword)
+	if err != nil {
+		return err
+	}
+	return u.users.ResetPassword(ctx, user.ID, newHash)
+}
+
+func generateResetToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func resetEmailHTML(name, token, appURL string) string {
+	return fmt.Sprintf(`
+		<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+			<h2>Password reset requested</h2>
+			<p>Hi %s, we received a request to reset your Election Monitor password.</p>
+			<p><a href="%s/reset-password?token=%s" style="background:#4f46e5;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Reset password</a></p>
+			<p style="color:#666;font-size:13px">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+		</div>
+	`, name, appURL, token)
 }
 
 func inviteEmailHTML(name, username, password, appURL string) string {

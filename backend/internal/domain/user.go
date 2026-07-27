@@ -44,9 +44,18 @@ type User struct {
 type UserRepository interface {
 	Create(ctx context.Context, u *User) error
 	FindByUsername(ctx context.Context, username string) (*User, error)
+	FindByEmail(ctx context.Context, email string) (*User, error)
 	FindByID(ctx context.Context, id string) (*User, error)
 	List(ctx context.Context, role Role) ([]*User, error)
 	UpdateAssignment(ctx context.Context, userID, puCode string) error
 	UpdateStatus(ctx context.Context, userID string, status OfficerStatus, loc *Location) error
 	UpdatePassword(ctx context.Context, userID, newPasswordHash string) error
+	// SetResetToken/FindByResetToken/ResetPassword back the forgot-password
+	// flow. The token and its expiry are stored only on the Mongo document
+	// (never mapped onto the shared User struct) so they can never leak
+	// through an API response the way PasswordHash could if it lacked its
+	// json:"-" tag.
+	SetResetToken(ctx context.Context, userID, token string, expiresAt time.Time) error
+	FindByResetToken(ctx context.Context, token string) (*User, error)
+	ResetPassword(ctx context.Context, userID, newPasswordHash string) error
 }
