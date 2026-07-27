@@ -36,7 +36,10 @@ type LoginResult struct {
 }
 
 func (u *Usecase) Login(ctx context.Context, username, password string) (*LoginResult, error) {
-	user, err := u.users.FindByUsername(ctx, username)
+	// Trimmed defensively — a stray leading/trailing space (e.g. from
+	// autofill or a copy-paste) would otherwise fail an exact-match lookup
+	// with a misleading "invalid credentials" instead of just working.
+	user, err := u.users.FindByUsername(ctx, strings.TrimSpace(username))
 	if err != nil {
 		return nil, domain.ErrUnauthorized
 	}
@@ -137,6 +140,14 @@ type SignupInput struct {
 // safe to leave open to the internet on a partisan-campaign tool where an
 // admin account sees every agent's live location and distress alerts.
 func (u *Usecase) Signup(ctx context.Context, in SignupInput) (*LoginResult, error) {
+	// Trimmed before validation/storage — an untrimmed username here would
+	// silently make that account impossible to log into later (an exact
+	// -match lookup on "name " never matches typed input "name").
+	in.Name = strings.TrimSpace(in.Name)
+	in.Username = strings.TrimSpace(in.Username)
+	in.Email = strings.TrimSpace(in.Email)
+	in.Phone = strings.TrimSpace(in.Phone)
+
 	if in.Name == "" || in.Username == "" {
 		return nil, domain.ErrInvalidInput
 	}
@@ -201,6 +212,7 @@ func (u *Usecase) ChangePassword(ctx context.Context, userID, currentPassword, n
 // message, so this endpoint can't be used to enumerate valid
 // usernames/emails.
 func (u *Usecase) ForgotPassword(ctx context.Context, usernameOrEmail string) error {
+	usernameOrEmail = strings.TrimSpace(usernameOrEmail)
 	user, err := u.users.FindByUsername(ctx, usernameOrEmail)
 	if err != nil {
 		user, err = u.users.FindByEmail(ctx, usernameOrEmail)
