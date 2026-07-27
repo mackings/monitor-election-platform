@@ -110,7 +110,7 @@ export default function DashboardOverviewPage() {
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight">Oyo State — Election Day Monitor</h1>
+          <h1 className="font-heading text-2xl font-bold tracking-tight">Oyo State Election Day Monitor</h1>
           <p className="text-sm text-muted-foreground">
             Real-time overview of polling unit activity and agent status.
           </p>
