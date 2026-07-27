@@ -15,6 +15,7 @@ import (
 	apphttp "monitor/backend/internal/delivery/http"
 	"monitor/backend/internal/delivery/http/handler"
 	"monitor/backend/internal/delivery/ws"
+	"monitor/backend/internal/domain"
 	mongorepo "monitor/backend/internal/repository/mongo"
 	"monitor/backend/internal/repository/storage"
 	"monitor/backend/internal/usecase/activity"
@@ -57,14 +58,23 @@ func main() {
 		log.Fatalf("r2 connect: %v", err)
 	}
 
-	mail := mailer.NewSMTP(mailer.Config{
-		Host:     cfg.SMTPHost,
-		Port:     cfg.SMTPPort,
-		Username: cfg.SMTPUser,
-		Password: cfg.SMTPPass,
-		From:     cfg.SMTPFrom,
-		FromName: cfg.SMTPFromName,
-	})
+	// Resend specifically goes over its HTTPS API rather than SMTP: many
+	// PaaS hosts (Render included) block outbound SMTP ports (25/587) to
+	// prevent abuse, which makes SMTP delivery hang and time out in
+	// production even though it works fine from a local machine.
+	var mail domain.Mailer
+	if cfg.SMTPHost == "smtp.resend.com" {
+		mail = mailer.NewResendAPI(cfg.SMTPPass, cfg.SMTPFrom, cfg.SMTPFromName)
+	} else {
+		mail = mailer.NewSMTP(mailer.Config{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUser,
+			Password: cfg.SMTPPass,
+			From:     cfg.SMTPFrom,
+			FromName: cfg.SMTPFromName,
+		})
+	}
 
 	hub := ws.NewHub()
 	// Usecases publish through this decorator, which persists every event
