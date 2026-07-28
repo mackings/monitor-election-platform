@@ -7,12 +7,13 @@ import { AssignedPUProvider, useAssignedPU } from "@/components/field/AssignedPU
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useLocationPing } from "@/lib/hooks/useLocationPing";
 import { cn } from "@/lib/utils";
-import { Home, AlertTriangle, FileText, LogOut, Settings } from "lucide-react";
+import { Home, AlertTriangle, FileText, Users, LogOut, Settings } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/field", label: "Home", icon: Home },
   { href: "/field/report", label: "Report", icon: AlertTriangle },
   { href: "/field/results", label: "Results", icon: FileText },
+  { href: "/field/community", label: "Community", icon: Users },
 ];
 
 function initials(name?: string) {
