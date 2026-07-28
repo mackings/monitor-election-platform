@@ -72,6 +72,26 @@ function FitToData({ pollingUnits }: { pollingUnits: PollingUnit[] }) {
   return null;
 }
 
+/** Keeps Leaflet's internal size cache in sync with the container's actual
+ * size. Without this, opening the PU detail sheet locks body scroll (the
+ * scrollbar disappears, reflowing the layout slightly) but Leaflet never
+ * finds out its container changed size, so it keeps painting tiles at the
+ * old dimensions -- visually bleeding past the map's real boundary into
+ * whatever now sits there. A ResizeObserver catches that reflow plus any
+ * other resize (sidebar collapse, window resize) generically. */
+function AutoInvalidateSize() {
+  const map = useMap();
+
+  useEffect(() => {
+    const container = map.getContainer();
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [map]);
+
+  return null;
+}
+
 export interface FocusTarget {
   lat: number;
   lng: number;
@@ -139,6 +159,7 @@ export const OyoMap = memo(function OyoMap({
       className="h-full w-full rounded-xl"
     >
       <TileLayer url={LIGHT_BASEMAP} attribution={LIGHT_BASEMAP_ATTRIBUTION} />
+      <AutoInvalidateSize />
       <FitToData pollingUnits={pollingUnits} />
       <FlyTo target={focusTarget} />
       {pollingUnits.map((pu) => {

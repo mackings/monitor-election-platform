@@ -152,7 +152,7 @@ export default function DashboardOverviewPage() {
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[1fr_320px]">
-        <div className="relative min-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+        <div className="relative isolate min-h-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
           {isSearching && (
             <div className="absolute top-3 left-1/2 z-[1000] -translate-x-1/2 rounded-full bg-slate-900/90 px-3 py-1 text-xs font-medium text-white shadow dark:bg-slate-100/90 dark:text-slate-900">
               Showing {searchMatches.length} match{searchMatches.length === 1 ? "" : "es"} for &quot;{searchQuery}&quot;
