@@ -8,10 +8,12 @@ import (
 	"monitor/backend/pkg/httpresp"
 )
 
-type GeoHandler struct{}
+type GeoHandler struct {
+	geocode *geocode.Client
+}
 
-func NewGeoHandler() *GeoHandler {
-	return &GeoHandler{}
+func NewGeoHandler(client *geocode.Client) *GeoHandler {
+	return &GeoHandler{geocode: client}
 }
 
 func (h *GeoHandler) ReverseGeocode(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +24,7 @@ func (h *GeoHandler) ReverseGeocode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	name, err := geocode.ReverseGeocode(r.Context(), lat, lng)
+	name, err := h.geocode.ReverseGeocode(r.Context(), lat, lng)
 	if err != nil {
 		httpresp.Error(w, http.StatusBadGateway, "couldn't resolve a location name")
 		return

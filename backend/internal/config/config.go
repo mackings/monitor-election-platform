@@ -25,6 +25,7 @@ type Config struct {
 	SMTPFrom        string
 	SMTPFromName    string
 	AppURL          string
+	LocationIQKey   string
 }
 
 func envOr(key, def string) string {
@@ -58,5 +59,6 @@ func Load() *Config {
 		SMTPFrom:        envOr("SMTP_FROM", ""),
 		SMTPFromName:    envOr("SMTP_FROM_NAME", "Election Monitor"),
 		AppURL:          envOr("APP_URL", "http://localhost:3002"),
+		LocationIQKey:   envOr("LOCATIONIQ_API_KEY", ""),
 	}
 }
