@@ -10,8 +10,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreateOfficerDialog } from "@/components/dashboard/CreateOfficerDialog";
+import { AgentDetailSheet } from "@/components/dashboard/AgentDetailSheet";
 import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
-import type { OfficerStatus } from "@/types";
+import type { OfficerStatus, User } from "@/types";
 
 const STATUS_VARIANT: Record<OfficerStatus, string> = {
   active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
@@ -33,6 +34,11 @@ export default function AgentsPage() {
   const [lga, setLga] = useState("all");
   const [ward, setWard] = useState("all");
   const [status, setStatus] = useState<OfficerStatus | "all">("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Re-looked-up from the store by id (rather than storing the User object
+  // the row was clicked with) so a location ping arriving over WS while
+  // the sheet is open updates the distance/last-seen shown live.
+  const selected: User | null = selectedId ? (officersMap[selectedId] ?? null) : null;
 
   const lgaOptions = useMemo(() => distinctLGAs(pollingUnits), [pollingUnits]);
   const wardOptions = useMemo(
@@ -144,7 +150,11 @@ export default function AgentsPage() {
                   ? pollingUnitsMap[officer.assigned_pu_code]
                   : undefined;
                 return (
-                  <TableRow key={officer.id}>
+                  <TableRow
+                    key={officer.id}
+                    className="cursor-pointer"
+                    onClick={() => setSelectedId(officer.id)}
+                  >
                     <TableCell className="flex items-center gap-2">
                       <Avatar className="h-7 w-7">
                         <AvatarFallback className="bg-slate-100 text-xs font-semibold dark:bg-slate-800">
@@ -182,6 +192,12 @@ export default function AgentsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <AgentDetailSheet
+        officer={selected}
+        assignedPU={selected?.assigned_pu_code ? pollingUnitsMap[selected.assigned_pu_code] : undefined}
+        onOpenChange={(open) => !open && setSelectedId(null)}
+      />
     </div>
   );
 }

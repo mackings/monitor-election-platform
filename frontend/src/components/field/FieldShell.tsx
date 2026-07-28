@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AssignedPUProvider, useAssignedPU } from "@/components/field/AssignedPUContext";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useLocationPing } from "@/lib/hooks/useLocationPing";
 import { cn } from "@/lib/utils";
 import { Home, AlertTriangle, FileText, LogOut, Settings } from "lucide-react";
 
@@ -127,6 +128,8 @@ function FieldHeader() {
 
 export function FieldShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const status = useAuthStore((s) => s.user?.status);
+  useLocationPing(status === "active");
 
   return (
     <AuthGuard allow={["field_officer"]}>

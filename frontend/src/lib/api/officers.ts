@@ -17,6 +17,10 @@ export function checkOut() {
   return api.post("/api/v1/officer/checkout");
 }
 
+export function updateOfficerLocation(lat: number, lng: number) {
+  return api.post("/api/v1/officer/location", { lat, lng });
+}
+
 export function updateStatus(puCode: string, status: PUStatus, note?: string) {
   return api.post("/api/v1/officer/status", { pu_code: puCode, status, note });
 }

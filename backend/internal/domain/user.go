@@ -49,6 +49,11 @@ type UserRepository interface {
 	List(ctx context.Context, role Role) ([]*User, error)
 	UpdateAssignment(ctx context.Context, userID, puCode string) error
 	UpdateStatus(ctx context.Context, userID string, status OfficerStatus, loc *Location) error
+	// UpdateLocation records a live position ping without touching status —
+	// distinct from UpdateStatus so a background location update (sent every
+	// ~25s while an officer is checked in) can never accidentally revert a
+	// distress/offline transition that raced it.
+	UpdateLocation(ctx context.Context, userID string, loc Location) error
 	UpdatePassword(ctx context.Context, userID, newPasswordHash string) error
 	// SetResetToken/FindByResetToken/ResetPassword back the forgot-password
 	// flow. The token and its expiry are stored only on the Mongo document

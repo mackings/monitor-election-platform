@@ -84,7 +84,7 @@ func main() {
 	tokens := jwtutil.NewManager(cfg.JWTSecret, cfg.JWTTTL)
 
 	authUC := auth.New(userRepo, puRepo, mail, tokens, cfg.AppURL)
-	officerUC := officer.New(userRepo, puRepo, statusEventRepo, broadcaster)
+	officerUC := officer.New(userRepo, puRepo, statusEventRepo, broadcaster, hub)
 	puUC := pollingunit.New(puRepo)
 	incidentUC := incident.New(incidentRepo, puRepo, broadcaster)
 	mediaUC := media.New(objectStore, mediaRepo)
@@ -99,6 +99,7 @@ func main() {
 		Media:       handler.NewMediaHandler(mediaUC),
 		Collation:   handler.NewCollationHandler(collationUC),
 		Activity:    handler.NewActivityHandler(activityUC),
+		Geo:         handler.NewGeoHandler(),
 		WS:          handler.NewWSHandler(hub, tokens),
 	}
 

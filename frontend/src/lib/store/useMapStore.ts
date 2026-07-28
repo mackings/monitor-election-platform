@@ -8,6 +8,7 @@ interface MapState {
   setOfficers: (officers: User[]) => void;
   updatePUStatus: (puCode: string, status: PUStatus) => void;
   updateOfficerStatus: (officerId: string, status: OfficerStatus, location?: Location) => void;
+  updateOfficerLocation: (officerId: string, location: Location, at: string) => void;
   assignOfficerToPU: (officerId: string, puCode: string) => void;
 }
 
@@ -41,6 +42,17 @@ export const useMapStore = create<MapState>((set) => ({
             status,
             last_location: location ?? existing.last_location,
           },
+        },
+      };
+    }),
+  updateOfficerLocation: (officerId, location, at) =>
+    set((state) => {
+      const existing = state.officers[officerId];
+      if (!existing) return state;
+      return {
+        officers: {
+          ...state.officers,
+          [officerId]: { ...existing, last_location: location, last_seen_at: at },
         },
       };
     }),

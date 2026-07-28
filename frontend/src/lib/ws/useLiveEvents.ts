@@ -5,7 +5,14 @@ import { liveSocket } from "./socket";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useIncidentStore } from "@/lib/store/useIncidentStore";
 import { buildFeedItem } from "@/lib/activity/feedItem";
-import type { DistressPayload, Incident, OfficerStatusPayload, StatusEvent, WSEvent } from "@/types";
+import type {
+  DistressPayload,
+  Incident,
+  OfficerLocationPayload,
+  OfficerStatusPayload,
+  StatusEvent,
+  WSEvent,
+} from "@/types";
 
 /** Mount once near the root of an authenticated layout. Opens a single WS
  * connection and fans out incoming events into the Zustand stores that the
@@ -13,6 +20,7 @@ import type { DistressPayload, Incident, OfficerStatusPayload, StatusEvent, WSEv
 export function useLiveEvents() {
   const updatePUStatus = useMapStore((s) => s.updatePUStatus);
   const updateOfficerStatus = useMapStore((s) => s.updateOfficerStatus);
+  const updateOfficerLocation = useMapStore((s) => s.updateOfficerLocation);
   const addIncident = useIncidentStore((s) => s.addIncident);
   const pushFeedItem = useIncidentStore((s) => s.pushFeedItem);
 
@@ -30,6 +38,11 @@ export function useLiveEvents() {
         case "officer.status_changed": {
           const p = evt.payload as OfficerStatusPayload;
           updateOfficerStatus(p.officer_id, p.status, p.location);
+          break;
+        }
+        case "officer.location_updated": {
+          const p = evt.payload as OfficerLocationPayload;
+          updateOfficerLocation(p.officer_id, p.location, p.at);
           break;
         }
         case "incident.created": {
@@ -59,5 +72,5 @@ export function useLiveEvents() {
       unsubscribe();
       liveSocket.disconnect();
     };
-  }, [updatePUStatus, updateOfficerStatus, addIncident, pushFeedItem]);
+  }, [updatePUStatus, updateOfficerStatus, updateOfficerLocation, addIncident, pushFeedItem]);
 }

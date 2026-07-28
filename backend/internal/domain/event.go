@@ -4,13 +4,14 @@ package domain
 type EventType string
 
 const (
-	EventOfficerStatusChanged EventType = "officer.status_changed"
-	EventOfficerCheckedIn     EventType = "officer.checked_in"
-	EventOfficerCheckedOut    EventType = "officer.checked_out"
-	EventPUStatusChanged      EventType = "pu.status_changed"
-	EventIncidentCreated      EventType = "incident.created"
-	EventDistressTriggered    EventType = "distress.triggered"
-	EventResultSubmitted      EventType = "result.submitted"
+	EventOfficerStatusChanged   EventType = "officer.status_changed"
+	EventOfficerCheckedIn       EventType = "officer.checked_in"
+	EventOfficerCheckedOut      EventType = "officer.checked_out"
+	EventOfficerLocationUpdated EventType = "officer.location_updated"
+	EventPUStatusChanged        EventType = "pu.status_changed"
+	EventIncidentCreated        EventType = "incident.created"
+	EventDistressTriggered      EventType = "distress.triggered"
+	EventResultSubmitted        EventType = "result.submitted"
 )
 
 // Event is the payload broadcast to connected WS clients. Usecases build

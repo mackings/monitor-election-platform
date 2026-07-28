@@ -21,6 +21,7 @@ type Handlers struct {
 	Media       *handler.MediaHandler
 	Collation   *handler.CollationHandler
 	Activity    *handler.ActivityHandler
+	Geo         *handler.GeoHandler
 	WS          *handler.WSHandler
 }
 
@@ -66,6 +67,7 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 			r.Get("/polling-units", h.PollingUnit.List)
 			r.Get("/polling-units/overview", h.PollingUnit.Overview)
 			r.Get("/polling-units/{code}", h.PollingUnit.Get)
+			r.Get("/geo/reverse", h.Geo.ReverseGeocode)
 			r.Get("/incidents", h.Incident.List)
 			r.Get("/results/tally", h.Collation.Tally)
 			r.Get("/activity", h.Activity.List)
@@ -75,6 +77,7 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 			r.Group(func(r chi.Router) {
 				r.Use(appmw.RequireRole(domain.RoleFieldOfficer))
 				r.Post("/officer/checkin", h.Officer.CheckIn)
+				r.Post("/officer/location", h.Officer.UpdateLocation)
 				r.Post("/officer/checkout", h.Officer.CheckOut)
 				r.Post("/officer/status", h.Officer.UpdateStatus)
 				r.Post("/officer/distress", h.Officer.Distress)

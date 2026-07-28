@@ -115,6 +115,7 @@ export type WSEventType =
   | "officer.status_changed"
   | "officer.checked_in"
   | "officer.checked_out"
+  | "officer.location_updated"
   | "pu.status_changed"
   | "incident.created"
   | "distress.triggered"
@@ -136,5 +137,14 @@ export interface DistressPayload {
   officer_id: string;
   pu_code: string;
   location: Location;
+  at: string;
+}
+
+export interface OfficerLocationPayload {
+  officer_id: string;
+  pu_code?: string;
+  status: OfficerStatus;
+  location: Location;
+  distance_km?: number;
   at: string;
 }

@@ -208,3 +208,13 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, userID string, status
 	_, err = r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": set})
 	return err
 }
+
+func (r *UserRepository) UpdateLocation(ctx context.Context, userID string, loc domain.Location) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	set := bson.M{"last_location": loc, "last_seen_at": time.Now()}
+	_, err = r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": set})
+	return err
+}

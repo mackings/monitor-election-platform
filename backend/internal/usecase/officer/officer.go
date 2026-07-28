@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"monitor/backend/internal/domain"
+	"monitor/backend/pkg/geo"
 )
 
 type Usecase struct {
@@ -12,10 +13,16 @@ type Usecase struct {
 	pus          domain.PollingUnitRepository
 	statusEvents domain.StatusEventRepository
 	broadcaster  domain.Broadcaster
+	// live is a broadcaster that only delivers over WS, without going
+	// through the persisting decorator -- a location ping fires every
+	// ~25s per checked-in officer, and durably logging each one to the
+	// activity collection forever would flood both the live feed and
+	// Atlas storage with GPS breadcrumbs nobody needs to query later.
+	live domain.Broadcaster
 }
 
-func New(users domain.UserRepository, pus domain.PollingUnitRepository, statusEvents domain.StatusEventRepository, b domain.Broadcaster) *Usecase {
-	return &Usecase{users: users, pus: pus, statusEvents: statusEvents, broadcaster: b}
+func New(users domain.UserRepository, pus domain.PollingUnitRepository, statusEvents domain.StatusEventRepository, b domain.Broadcaster, live domain.Broadcaster) *Usecase {
+	return &Usecase{users: users, pus: pus, statusEvents: statusEvents, broadcaster: b, live: live}
 }
 
 type officerStatusPayload struct {
@@ -103,6 +110,50 @@ func (u *Usecase) Distress(ctx context.Context, officerID, puCode string, loc do
 		PUCode:    puCode,
 		OfficerID: officerID,
 		Payload:   distressPayload{OfficerID: officerID, PUCode: puCode, Location: loc, At: time.Now()},
+	})
+	return nil
+}
+
+type officerLocationPayload struct {
+	OfficerID  string               `json:"officer_id"`
+	PUCode     string               `json:"pu_code,omitempty"`
+	Status     domain.OfficerStatus `json:"status"`
+	Location   domain.Location      `json:"location"`
+	DistanceKm *float64             `json:"distance_km,omitempty"`
+	At         time.Time            `json:"at"`
+}
+
+// UpdateLocation records a live position ping from an officer's device
+// while they're checked in -- separate from CheckIn/Distress, which only
+// capture a single location at the moment they fire. Status is left
+// untouched (see UserRepository.UpdateLocation) and the event goes out
+// over live (not the persisting broadcaster) since this fires far too
+// often to be worth durably logging.
+func (u *Usecase) UpdateLocation(ctx context.Context, officerID string, loc domain.Location) error {
+	user, err := u.users.FindByID(ctx, officerID)
+	if err != nil {
+		return err
+	}
+	if err := u.users.UpdateLocation(ctx, officerID, loc); err != nil {
+		return err
+	}
+
+	var distanceKm *float64
+	if user.AssignedPUCode != "" {
+		if pu, err := u.pus.FindByCode(ctx, user.AssignedPUCode); err == nil {
+			d := geo.HaversineKm(loc.Lat, loc.Lng, pu.Lat, pu.Lng)
+			distanceKm = &d
+		}
+	}
+
+	u.live.Publish(domain.Event{
+		Type:      domain.EventOfficerLocationUpdated,
+		PUCode:    user.AssignedPUCode,
+		OfficerID: officerID,
+		Payload: officerLocationPayload{
+			OfficerID: officerID, PUCode: user.AssignedPUCode, Status: user.Status,
+			Location: loc, DistanceKm: distanceKm, At: time.Now(),
+		},
 	})
 	return nil
 }
