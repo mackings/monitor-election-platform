@@ -22,7 +22,13 @@ export function AssignedPUProvider({ children }: { children: React.ReactNode }) 
       .then((result) => {
         if (!ignore) setPU(result);
       })
-      .catch(() => {});
+      .catch((err) => {
+        // Swallowed from the UI's perspective (callers just see `pu` stay
+        // null and fall back to the raw code) but logged so an outage like
+        // the backend/DB being down doesn't look identical to "PU not
+        // found" when someone's debugging why names aren't showing.
+        if (!ignore) console.error("Failed to resolve assigned polling unit:", err);
+      });
     return () => {
       ignore = true;
     };

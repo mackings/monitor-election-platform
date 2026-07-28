@@ -126,8 +126,17 @@ func (r *PollingUnitRepository) FindByCode(ctx context.Context, code string) (*d
 }
 
 func (r *PollingUnitRepository) AssignOfficer(ctx context.Context, code, officerID string) error {
-	_, err := r.col.UpdateOne(ctx, bson.M{"pu_code": code}, bson.M{"$set": bson.M{"assigned_officer_id": officerID, "updated_at": time.Now()}})
-	return err
+	res, err := r.col.UpdateOne(ctx, bson.M{"pu_code": code}, bson.M{"$set": bson.M{"assigned_officer_id": officerID, "updated_at": time.Now()}})
+	if err != nil {
+		return err
+	}
+	// A code that matches no document (typo'd/mistyped by an admin) would
+	// otherwise succeed silently, leaving the officer assigned to a PU that
+	// doesn't exist and no visible error anywhere.
+	if res.MatchedCount == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *PollingUnitRepository) UpdateStatus(ctx context.Context, code string, status domain.PUStatus) error {

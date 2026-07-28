@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,7 +14,103 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createOfficer, type CreateOfficerResult } from "@/lib/api/auth";
-import { UserPlus } from "lucide-react";
+import { listPollingUnits } from "@/lib/api/pollingUnits";
+import type { PollingUnit } from "@/types";
+import { UserPlus, X } from "lucide-react";
+
+const MAX_PU_RESULTS = 8;
+
+/** Search-select for the assigned PU: types-and-picks a real polling unit
+ * rather than free-typing a code, since a mistyped code used to save
+ * silently and just show the raw code forever instead of the PU's name. */
+function PUPicker({ value, onChange }: { value: PollingUnit | null; onChange: (pu: PollingUnit | null) => void }) {
+  const [allPUs, setAllPUs] = useState<PollingUnit[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (allPUs !== null) return;
+    listPollingUnits()
+      .then(setAllPUs)
+      .catch(() => setAllPUs([]));
+  }, [allPUs]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || !allPUs) return [];
+    return allPUs
+      .filter((pu) => pu.pu_code.toLowerCase().includes(q) || pu.pu_name.toLowerCase().includes(q))
+      .slice(0, MAX_PU_RESULTS);
+  }, [query, allPUs]);
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border border-input px-3 py-2 text-sm">
+        <span className="min-w-0 truncate">
+          {value.pu_name} <span className="text-muted-foreground">({value.pu_code})</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          aria-label="Clear selected polling unit"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <Input
+        id="pu"
+        placeholder={allPUs === null ? "Loading polling units…" : "Search by name or code…"}
+        value={query}
+        disabled={allPUs === null}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+      />
+      {open && results.length > 0 && (
+        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-input bg-popover shadow-md">
+          {results.map((pu) => (
+            <button
+              key={pu.pu_code}
+              type="button"
+              className="block w-full truncate px-3 py-2 text-left text-sm hover:bg-accent"
+              onClick={() => {
+                onChange(pu);
+                setQuery("");
+                setOpen(false);
+              }}
+            >
+              {pu.pu_name} <span className="text-muted-foreground">({pu.pu_code})</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && query.trim().length > 0 && results.length === 0 && allPUs !== null && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-popover px-3 py-2 text-sm text-muted-foreground shadow-md">
+          No matching polling unit.
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface CreateOfficerDialogProps {
   onCreated?: () => void;
@@ -27,7 +123,7 @@ export function CreateOfficerDialog({ onCreated, role = "field_officer" }: Creat
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  const [puCode, setPuCode] = useState("");
+  const [selectedPU, setSelectedPU] = useState<PollingUnit | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<CreateOfficerResult | null>(null);
 
@@ -40,7 +136,7 @@ export function CreateOfficerDialog({ onCreated, role = "field_officer" }: Creat
         phone,
         email,
         role,
-        assigned_pu_code: isAdminInvite ? undefined : puCode || undefined,
+        assigned_pu_code: isAdminInvite ? undefined : (selectedPU?.pu_code ?? undefined),
       });
       setResult(created);
       onCreated?.();
@@ -56,7 +152,7 @@ export function CreateOfficerDialog({ onCreated, role = "field_officer" }: Creat
       setName("");
       setPhone("");
       setEmail("");
-      setPuCode("");
+      setSelectedPU(null);
     }
   }
 
@@ -140,13 +236,8 @@ export function CreateOfficerDialog({ onCreated, role = "field_officer" }: Creat
               </div>
               {!isAdminInvite && (
                 <div className="space-y-2">
-                  <Label htmlFor="pu">Assigned polling unit code (optional)</Label>
-                  <Input
-                    id="pu"
-                    placeholder="e.g. 30-26-06-001"
-                    value={puCode}
-                    onChange={(e) => setPuCode(e.target.value)}
-                  />
+                  <Label htmlFor="pu">Assigned polling unit (optional)</Label>
+                  <PUPicker value={selectedPU} onChange={setSelectedPU} />
                 </div>
               )}
             </div>

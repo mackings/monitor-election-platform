@@ -78,6 +78,17 @@ func (u *Usecase) CreateOfficer(ctx context.Context, in CreateOfficerInput) (*Cr
 	if in.Role == "" {
 		in.Role = domain.RoleFieldOfficer
 	}
+	// Validated before creating anything — a typo'd PU code used to only
+	// surface once AssignOfficer ran post-creation, leaving behind an
+	// orphaned officer account with generated credentials nobody saw.
+	if in.AssignedPUCode != "" {
+		if _, err := u.pus.FindByCode(ctx, in.AssignedPUCode); err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return nil, fmt.Errorf("%w: no polling unit with code %q", domain.ErrNotFound, in.AssignedPUCode)
+			}
+			return nil, err
+		}
+	}
 	username := generateUsername(in.Name)
 	password, err := generatePassword()
 	if err != nil {
@@ -104,6 +115,9 @@ func (u *Usecase) CreateOfficer(ctx context.Context, in CreateOfficerInput) (*Cr
 	// separate AssignPU call.
 	if in.AssignedPUCode != "" {
 		if err := u.pus.AssignOfficer(ctx, in.AssignedPUCode, user.ID); err != nil {
+			if errors.Is(err, domain.ErrNotFound) {
+				return nil, fmt.Errorf("%w: no polling unit with code %q", domain.ErrNotFound, in.AssignedPUCode)
+			}
 			return nil, err
 		}
 	}

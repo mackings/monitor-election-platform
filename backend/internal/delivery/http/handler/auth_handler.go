@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"monitor/backend/internal/delivery/http/middleware"
@@ -62,6 +63,10 @@ func (h *AuthHandler) CreateOfficer(w http.ResponseWriter, r *http.Request) {
 		Name: body.Name, Phone: body.Phone, Email: body.Email, Role: body.Role, AssignedPUCode: body.AssignedPUCode,
 	})
 	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			httpresp.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		httpresp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}

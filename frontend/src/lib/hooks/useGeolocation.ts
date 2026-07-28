@@ -68,7 +68,7 @@ export function useGeolocation() {
         },
         {
           enableHighAccuracy: options?.enableHighAccuracy ?? true,
-          timeout: options?.timeoutMs ?? 10000,
+          timeout: options?.timeoutMs ?? 20000,
         },
       );
     });
