@@ -167,7 +167,14 @@ export default function AgentsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">{officer.username}</TableCell>
-                    <TableCell>{assignedPU?.pu_name ?? officer.assigned_pu_code ?? "—"}</TableCell>
+                    <TableCell>
+                      {assignedPU?.pu_name ?? officer.assigned_pu_code ?? "—"}
+                      {assignedPU && assignedPU.assigned_officer_id !== officer.id && (
+                        <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                          sub-agent
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className={STATUS_VARIANT[officer.status]}>
                         {officer.status}

@@ -8,10 +8,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-func replaceUpsert() *options.ReplaceOptionsBuilder {
-	return options.Replace().SetUpsert(true)
-}
-
 // Connect dials MongoDB and returns the database handle used to construct
 // every repository.
 func Connect(uri, dbName string) (*mongo.Database, func(context.Context) error, error) {

@@ -33,6 +33,10 @@ type RegisterInput struct {
 	UploadedBy  string
 	RelatedType domain.RelatedType
 	RelatedID   string
+	SHA256      string
+	CapturedAt  *time.Time
+	CapturedLat *float64
+	CapturedLng *float64
 }
 
 func (u *Usecase) Register(ctx context.Context, in RegisterInput) (*domain.Media, error) {
@@ -43,6 +47,10 @@ func (u *Usecase) Register(ctx context.Context, in RegisterInput) (*domain.Media
 		UploadedBy:  in.UploadedBy,
 		RelatedType: in.RelatedType,
 		RelatedID:   in.RelatedID,
+		SHA256:      in.SHA256,
+		CapturedAt:  in.CapturedAt,
+		CapturedLat: in.CapturedLat,
+		CapturedLng: in.CapturedLng,
 	}
 	if err := u.media.Create(ctx, m); err != nil {
 		return nil, err
@@ -64,6 +72,10 @@ func extensionFor(contentType string) string {
 		return ".png"
 	case "video/mp4":
 		return ".mp4"
+	case "audio/webm":
+		return ".webm"
+	case "audio/mp4":
+		return ".m4a"
 	default:
 		return ""
 	}

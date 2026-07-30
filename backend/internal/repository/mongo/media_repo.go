@@ -19,6 +19,10 @@ type mediaDoc struct {
 	UploadedBy  string             `bson:"uploaded_by"`
 	RelatedType domain.RelatedType `bson:"related_type,omitempty"`
 	RelatedID   string             `bson:"related_id,omitempty"`
+	SHA256      string             `bson:"sha256,omitempty"`
+	CapturedAt  *time.Time         `bson:"captured_at,omitempty"`
+	CapturedLat *float64           `bson:"captured_lat,omitempty"`
+	CapturedLng *float64           `bson:"captured_lng,omitempty"`
 	CreatedAt   time.Time          `bson:"created_at"`
 }
 
@@ -31,6 +35,10 @@ func (d *mediaDoc) toDomain() *domain.Media {
 		UploadedBy:  d.UploadedBy,
 		RelatedType: d.RelatedType,
 		RelatedID:   d.RelatedID,
+		SHA256:      d.SHA256,
+		CapturedAt:  d.CapturedAt,
+		CapturedLat: d.CapturedLat,
+		CapturedLng: d.CapturedLng,
 		CreatedAt:   d.CreatedAt,
 	}
 }
@@ -52,6 +60,10 @@ func (r *MediaRepository) Create(ctx context.Context, m *domain.Media) error {
 		UploadedBy:  m.UploadedBy,
 		RelatedType: m.RelatedType,
 		RelatedID:   m.RelatedID,
+		SHA256:      m.SHA256,
+		CapturedAt:  m.CapturedAt,
+		CapturedLat: m.CapturedLat,
+		CapturedLng: m.CapturedLng,
 		CreatedAt:   time.Now(),
 	}
 	_, err := r.col.InsertOne(ctx, doc)

@@ -6,6 +6,7 @@ import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AssignedPUProvider, useAssignedPU } from "@/components/field/AssignedPUContext";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useLocationPing } from "@/lib/hooks/useLocationPing";
+import { OfflineQueueBadge } from "@/components/field/OfflineQueueBadge";
 import { cn } from "@/lib/utils";
 import { Home, AlertTriangle, FileText, Users, LogOut, Settings } from "lucide-react";
 
@@ -103,7 +104,8 @@ function FieldHeader() {
 
         <InlineNav pathname={pathname} />
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1.5">
+          <OfflineQueueBadge />
           <Link
             href="/field/account"
             className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-900 dark:hover:text-slate-300"

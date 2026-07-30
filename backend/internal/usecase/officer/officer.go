@@ -162,18 +162,37 @@ func (u *Usecase) List(ctx context.Context) ([]*domain.User, error) {
 	return u.users.List(ctx, domain.RoleFieldOfficer)
 }
 
-// AssignPU assigns an officer to a polling unit, keeping the relationship
-// one-to-one on both sides: if the officer was already assigned elsewhere,
-// that PU's back-reference is cleared, and if the target PU already had a
-// different officer, that officer's assignment is cleared too — otherwise
-// either side could end up pointing at a stale, no-longer-true assignment.
+// clearOldPrimaryIfOwned clears a PU's back-reference to officerID only if
+// officerID was actually recorded as that PU's primary agent -- an officer
+// can also hold a PU code as a sub-agent (see AssignSubAgent), and in that
+// case the PU's real primary must not be evicted just because the
+// sub-agent is being reassigned elsewhere.
+func (u *Usecase) clearOldPrimaryIfOwned(ctx context.Context, officerID, oldPUCode string) error {
+	if oldPUCode == "" {
+		return nil
+	}
+	oldPU, err := u.pus.FindByCode(ctx, oldPUCode)
+	if err != nil || oldPU.AssignedOfficerID != officerID {
+		return nil
+	}
+	return u.pus.AssignOfficer(ctx, oldPUCode, "")
+}
+
+// AssignPU assigns an officer as a polling unit's PRIMARY agent, keeping
+// that relationship one-to-one on both sides: if the officer was already
+// someone else's PU's primary, that PU's back-reference is cleared, and if
+// the target PU already had a different primary, that officer's
+// assignment is cleared too — otherwise either side could end up pointing
+// at a stale, no-longer-true assignment. Doesn't touch sub-agents on
+// either PU (see AssignSubAgent) -- those are independent of who's
+// primary.
 func (u *Usecase) AssignPU(ctx context.Context, officerID, puCode string) error {
 	officer, err := u.users.FindByID(ctx, officerID)
 	if err != nil {
 		return err
 	}
-	if officer.AssignedPUCode != "" && officer.AssignedPUCode != puCode {
-		if err := u.pus.AssignOfficer(ctx, officer.AssignedPUCode, ""); err != nil {
+	if officer.AssignedPUCode != puCode {
+		if err := u.clearOldPrimaryIfOwned(ctx, officerID, officer.AssignedPUCode); err != nil {
 			return err
 		}
 	}
@@ -192,4 +211,40 @@ func (u *Usecase) AssignPU(ctx context.Context, officerID, puCode string) error 
 		return err
 	}
 	return u.pus.AssignOfficer(ctx, puCode, officerID)
+}
+
+// AssignSubAgent gives an officer access to submit for a polling unit
+// without making them its primary -- the PU's AssignedOfficerID (which
+// drives the dashboard's single "assigned agent" display/call button)
+// stays whoever it already was, or empty if nobody's primary yet. A
+// sub-agent is just any other officer whose AssignedPUCode matches the PU;
+// there's no separate list to maintain, so this is a one-field update.
+func (u *Usecase) AssignSubAgent(ctx context.Context, officerID, puCode string) error {
+	officer, err := u.users.FindByID(ctx, officerID)
+	if err != nil {
+		return err
+	}
+	if _, err := u.pus.FindByCode(ctx, puCode); err != nil {
+		return err
+	}
+	if officer.AssignedPUCode != puCode {
+		if err := u.clearOldPrimaryIfOwned(ctx, officerID, officer.AssignedPUCode); err != nil {
+			return err
+		}
+	}
+	return u.users.UpdateAssignment(ctx, officerID, puCode)
+}
+
+// UnassignPU clears an officer's PU assignment entirely (primary or
+// sub-agent) -- used to remove a sub-agent, or to unassign someone
+// without immediately picking a replacement.
+func (u *Usecase) UnassignPU(ctx context.Context, officerID string) error {
+	officer, err := u.users.FindByID(ctx, officerID)
+	if err != nil {
+		return err
+	}
+	if err := u.clearOldPrimaryIfOwned(ctx, officerID, officer.AssignedPUCode); err != nil {
+		return err
+	}
+	return u.users.UpdateAssignment(ctx, officerID, "")
 }

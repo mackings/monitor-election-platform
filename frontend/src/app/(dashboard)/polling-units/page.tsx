@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useGeolocation } from "@/lib/hooks/useGeolocation";
@@ -12,14 +12,39 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Pagination } from "@/components/dashboard/Pagination";
 import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
 import { PU_STATUS_COLOR, PU_STATUS_LABEL } from "@/components/map/statusColors";
-import { Search, X, LocateFixed, Loader2 } from "lucide-react";
+import { Search, X, LocateFixed, Loader2, ListFilter, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import type { PollingUnit, PUStatus } from "@/types";
 
 const PAGE_SIZE = 50;
+
+const STATUS_OPTIONS: PUStatus[] = ["not_open", "voting", "incident", "distress", "completed", "no_report"];
+
+// Distress/incident first regardless of alphabetical order -- these are
+// what an admin sorting "by priority" actually wants surfaced.
+const STATUS_PRIORITY: Record<PUStatus, number> = {
+  distress: 0,
+  incident: 1,
+  voting: 2,
+  not_open: 3,
+  no_report: 4,
+  completed: 5,
+};
+
+const SORT_OPTIONS = [
+  { value: "name", label: "Name (A–Z)" },
+  { value: "priority", label: "Status priority" },
+] as const;
+type SortOption = (typeof SORT_OPTIONS)[number]["value"];
 
 function matchesQuery(pu: PollingUnit, query: string): boolean {
   return (
@@ -31,21 +56,51 @@ function matchesQuery(pu: PollingUnit, query: string): boolean {
   );
 }
 
+/** Reads/writes filter state to the URL query string (via the raw History
+ * API, not Next's router -- this is purely for shareable/bookmarkable
+ * filtered views, not real navigation, so it shouldn't trigger Next's
+ * data-fetching/rerender machinery or need a Suspense boundary). */
+function readParam(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get(key);
+}
+
 export default function PollingUnitsPage() {
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
   const officersMap = useMapStore((s) => s.officers);
   const pollingUnits = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => readParam("q") ?? "");
   const debouncedQuery = useDebouncedValue(query, 200);
-  const [lga, setLga] = useState("all");
-  const [ward, setWard] = useState("all");
-  const [status, setStatus] = useState<PUStatus | "all">("all");
-  const [assignment, setAssignment] = useState<"all" | "assigned" | "unassigned">("all");
+  const [lga, setLga] = useState(() => readParam("lga") ?? "all");
+  const [ward, setWard] = useState(() => readParam("ward") ?? "all");
+  const [statuses, setStatuses] = useState<Set<PUStatus>>(() => {
+    const raw = readParam("status");
+    return raw ? new Set(raw.split(",") as PUStatus[]) : new Set();
+  });
+  const [assignment, setAssignment] = useState<"all" | "assigned" | "unassigned">(
+    () => (readParam("assignment") as "assigned" | "unassigned" | null) ?? "all",
+  );
+  const [sort, setSort] = useState<SortOption>(() => (readParam("sort") as SortOption | null) ?? "name");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PollingUnit | undefined>();
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const { locate, loading: locating } = useGeolocation();
+
+  // Keeps the URL in sync so the current filter set can be copied/
+  // bookmarked/shared with another admin and reopened exactly as left.
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
+    if (lga !== "all") params.set("lga", lga);
+    if (ward !== "all") params.set("ward", ward);
+    if (statuses.size > 0) params.set("status", Array.from(statuses).join(","));
+    if (assignment !== "all") params.set("assignment", assignment);
+    if (sort !== "name") params.set("sort", sort);
+    const qs = params.toString();
+    const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", url);
+  }, [debouncedQuery, lga, ward, statuses, assignment, sort]);
 
   const lgaOptions = useMemo(() => distinctLGAs(pollingUnits), [pollingUnits]);
   const wardOptions = useMemo(
@@ -58,37 +113,43 @@ export default function PollingUnitsPage() {
     return pollingUnits.filter((pu) => {
       if (lga !== "all" && pu.lga !== lga) return false;
       if (ward !== "all" && pu.ward !== ward) return false;
-      if (status !== "all" && pu.current_status !== status) return false;
+      if (statuses.size > 0 && !statuses.has(pu.current_status)) return false;
       if (assignment === "assigned" && !pu.assigned_officer_id) return false;
       if (assignment === "unassigned" && pu.assigned_officer_id) return false;
       if (q && !matchesQuery(pu, q)) return false;
       return true;
     });
-  }, [pollingUnits, lga, ward, status, assignment, debouncedQuery]);
+  }, [pollingUnits, lga, ward, statuses, assignment, debouncedQuery]);
 
-  // Sorted by proximity (nearest first) instead of the default order once
-  // the admin has located themselves — other filters (LGA/ward/status/
-  // search) still apply on top, this only changes the ordering.
+  // Sorted by proximity (nearest first) once the admin has located
+  // themselves -- that takes priority over the Name/Status sort picker,
+  // matching the existing "near me" behavior. Otherwise sorts by the
+  // selected sort option.
   const sorted = useMemo(() => {
-    if (!userLocation) return filtered;
-    return [...filtered].sort(
-      (a, b) =>
-        haversineKm(userLocation.lat, userLocation.lng, a.lat, a.lng) -
-        haversineKm(userLocation.lat, userLocation.lng, b.lat, b.lng),
-    );
-  }, [filtered, userLocation]);
+    if (userLocation) {
+      return [...filtered].sort(
+        (a, b) =>
+          haversineKm(userLocation.lat, userLocation.lng, a.lat, a.lng) -
+          haversineKm(userLocation.lat, userLocation.lng, b.lat, b.lng),
+      );
+    }
+    if (sort === "priority") {
+      return [...filtered].sort((a, b) => STATUS_PRIORITY[a.current_status] - STATUS_PRIORITY[b.current_status]);
+    }
+    return [...filtered].sort((a, b) => a.pu_name.localeCompare(b.pu_name));
+  }, [filtered, userLocation, sort]);
 
   const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const pageItems = sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const filtersActive =
-    lga !== "all" || ward !== "all" || status !== "all" || assignment !== "all" || debouncedQuery.trim() !== "";
+    lga !== "all" || ward !== "all" || statuses.size > 0 || assignment !== "all" || debouncedQuery.trim() !== "";
 
   function clearFilters() {
     setLga("all");
     setWard("all");
-    setStatus("all");
+    setStatuses(new Set());
     setAssignment("all");
     setQuery("");
     setPage(1);
@@ -99,6 +160,16 @@ export default function PollingUnitsPage() {
       setter(v);
       setPage(1);
     };
+  }
+
+  function toggleStatus(status: PUStatus, checked: boolean) {
+    setStatuses((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(status);
+      else next.delete(status);
+      return next;
+    });
+    setPage(1);
   }
 
   async function handleLocateMe() {
@@ -202,20 +273,27 @@ export default function PollingUnitsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={status} onValueChange={(v) => updateAndResetPage(setStatus)((v as PUStatus | "all") ?? "all")}>
-          <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="not_open">Not yet open</SelectItem>
-            <SelectItem value="voting">Voting in progress</SelectItem>
-            <SelectItem value="incident">Incident reported</SelectItem>
-            <SelectItem value="distress">Agent in distress</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="no_report">No report</SelectItem>
-          </SelectContent>
-        </Select>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-xl" />
+            }
+          >
+            <ListFilter className="h-4 w-4" />
+            Status{statuses.size > 0 ? ` (${statuses.size})` : ""}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {STATUS_OPTIONS.map((s) => (
+              <DropdownMenuCheckboxItem
+                key={s}
+                checked={statuses.has(s)}
+                onCheckedChange={(checked) => toggleStatus(s, checked)}
+              >
+                {PU_STATUS_LABEL[s]}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Select
           value={assignment}
@@ -230,6 +308,22 @@ export default function PollingUnitsPage() {
             <SelectItem value="unassigned">Unassigned</SelectItem>
           </SelectContent>
         </Select>
+
+        {!userLocation && (
+          <Select value={sort} onValueChange={(v) => setSort((v as SortOption) ?? "name")}>
+            <SelectTrigger className="w-44 rounded-xl">
+              <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {filtersActive && (
           <Button variant="ghost" size="sm" onClick={clearFilters}>

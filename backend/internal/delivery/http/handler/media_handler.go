@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"monitor/backend/internal/delivery/http/middleware"
 	"monitor/backend/internal/domain"
@@ -42,6 +43,10 @@ func (h *MediaHandler) Register(w http.ResponseWriter, r *http.Request) {
 		ContentType string             `json:"content_type"`
 		RelatedType domain.RelatedType `json:"related_type"`
 		RelatedID   string             `json:"related_id"`
+		SHA256      string             `json:"sha256"`
+		CapturedAt  *time.Time         `json:"captured_at"`
+		CapturedLat *float64           `json:"captured_lat"`
+		CapturedLng *float64           `json:"captured_lng"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httpresp.Error(w, http.StatusBadRequest, "invalid body")
@@ -51,6 +56,7 @@ func (h *MediaHandler) Register(w http.ResponseWriter, r *http.Request) {
 	m, err := h.media.Register(r.Context(), media.RegisterInput{
 		ObjectKey: body.ObjectKey, ContentType: body.ContentType, UploadedBy: userID,
 		RelatedType: body.RelatedType, RelatedID: body.RelatedID,
+		SHA256: body.SHA256, CapturedAt: body.CapturedAt, CapturedLat: body.CapturedLat, CapturedLng: body.CapturedLng,
 	})
 	if err != nil {
 		httpresp.Error(w, http.StatusInternalServerError, err.Error())

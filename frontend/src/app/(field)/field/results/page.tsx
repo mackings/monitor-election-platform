@@ -4,11 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MediaUploader } from "@/components/field/MediaUploader";
+import { VoteSheetUploader } from "@/components/field/VoteSheetUploader";
 import { submitResult } from "@/lib/api/collation";
+import { queueResult } from "@/lib/offline/queue";
+import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { buildResultSmsBody, buildResultSmsLink, hasSmsCollationNumber } from "@/lib/sms/composeSmsResult";
 import { toast } from "sonner";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, Plus, Trash2, MessageSquareText } from "lucide-react";
 
 interface Row {
   id: string;
@@ -36,6 +39,19 @@ export default function ResultEntryPage() {
     setRows((r) => r.filter((row) => row.id !== id));
   }
 
+  function handleSubmitViaSms() {
+    if (!puCode) {
+      toast.error("You have no assigned polling unit yet.");
+      return;
+    }
+    if (!hasSmsCollationNumber()) {
+      toast.error("SMS submission isn't set up for this deployment yet.");
+      return;
+    }
+    const body = buildResultSmsBody({ puCode, accreditedVoters: accredited, voteCounts: rows });
+    window.location.href = buildResultSmsLink(body);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!puCode) {
@@ -46,7 +62,8 @@ export default function ResultEntryPage() {
       toast.error("Still uploading the result sheet photo — wait for it to finish before submitting.");
       return;
     }
-    if (mediaIds.length === 0) {
+    const offline = typeof navigator !== "undefined" && !navigator.onLine;
+    if (mediaIds.length === 0 && !offline) {
       toast.error("Attach a photo of the result sheet before submitting.");
       return;
     }
@@ -55,20 +72,33 @@ export default function ResultEntryPage() {
       if (!row.candidate.trim()) continue;
       voteCounts[row.candidate.trim()] = Number(row.votes) || 0;
     }
+    const input = {
+      pu_code: puCode,
+      vote_counts: voteCounts,
+      total_accredited_voters: Number(accredited) || 0,
+      media_ids: mediaIds,
+    };
     setSubmitting(true);
     try {
-      await submitResult({
-        pu_code: puCode,
-        vote_counts: voteCounts,
-        total_accredited_voters: Number(accredited) || 0,
-        media_ids: mediaIds,
-      });
+      await submitResult(input);
       toast.success("Result sheet submitted for collation");
       setRows([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
       setAccredited("");
       setMediaIds([]);
-    } catch {
-      toast.error("Couldn't submit results. Try again.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error("Couldn't submit results — the server rejected it. Check the form and try again.");
+      } else {
+        await queueResult(input);
+        toast.info(
+          mediaIds.length === 0
+            ? "No connection — figures saved on this device without a photo. They'll send automatically once you're back online; attach the photo in a follow-up report if needed."
+            : "No connection — result saved on this device and will send automatically once you're back online.",
+        );
+        setRows([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
+        setAccredited("");
+        setMediaIds([]);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -89,7 +119,7 @@ export default function ResultEntryPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label>Result sheet photo</Label>
-          <MediaUploader relatedType="result" onChange={setMediaIds} onUploadingChange={setUploading} />
+          <VoteSheetUploader puCode={puCode} onChange={setMediaIds} onUploadingChange={setUploading} />
         </div>
 
         <div className="space-y-2">
@@ -147,6 +177,19 @@ export default function ResultEntryPage() {
         >
           {uploading ? "Uploading evidence…" : submitting ? "Submitting…" : "Submit result"}
         </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full gap-1.5"
+          onClick={handleSubmitViaSms}
+        >
+          <MessageSquareText className="h-4 w-4" />
+          No connection? Submit via SMS instead
+        </Button>
+        <p className="text-center text-[11px] text-muted-foreground">
+          Opens your phone&apos;s messaging app with the figures filled in — review and send it yourself.
+        </p>
       </form>
     </div>
   );

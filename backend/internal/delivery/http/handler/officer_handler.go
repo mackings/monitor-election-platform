@@ -43,6 +43,37 @@ func (h *OfficerHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
+func (h *OfficerHandler) AssignSubAgent(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		OfficerID string `json:"officer_id"`
+		PUCode    string `json:"pu_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := h.officer.AssignSubAgent(r.Context(), body.OfficerID, body.PUCode); err != nil {
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+}
+
+func (h *OfficerHandler) Unassign(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		OfficerID string `json:"officer_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := h.officer.UnassignPU(r.Context(), body.OfficerID); err != nil {
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "unassigned"})
+}
+
 func (h *OfficerHandler) CheckIn(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Lat float64 `json:"lat"`

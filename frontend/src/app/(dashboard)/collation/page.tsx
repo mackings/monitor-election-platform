@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LogSmsResultDialog } from "@/components/dashboard/LogSmsResultDialog";
 import type { TallyRow } from "@/types";
 
 const LEVELS = [
@@ -26,6 +27,7 @@ export default function CollationPage() {
   const [level, setLevel] = useState<(typeof LEVELS)[number]["value"]>("lga");
   const [rows, setRows] = useState<TallyRow[]>([]);
   const [fetchedLevel, setFetchedLevel] = useState<typeof level | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const loading = fetchedLevel !== level;
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
 
@@ -39,7 +41,7 @@ export default function CollationPage() {
     return () => {
       ignore = true;
     };
-  }, [level]);
+  }, [level, refreshKey]);
 
   const candidates = useMemo(() => {
     const set = new Set<string>();
@@ -56,18 +58,21 @@ export default function CollationPage() {
             Running tally from result sheets submitted by field agents.
           </p>
         </div>
-        <Select value={level} onValueChange={(v) => setLevel(v as typeof level)}>
-          <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {LEVELS.map((l) => (
-              <SelectItem key={l.value} value={l.value}>
-                {l.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <LogSmsResultDialog onLogged={() => setRefreshKey((k) => k + 1)} />
+          <Select value={level} onValueChange={(v) => setLevel(v as typeof level)}>
+            <SelectTrigger className="w-44 rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LEVELS.map((l) => (
+                <SelectItem key={l.value} value={l.value}>
+                  {l.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="rounded-2xl border-slate-200/70 dark:border-slate-800">

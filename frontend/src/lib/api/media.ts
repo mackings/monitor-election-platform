@@ -5,12 +5,21 @@ export function presignUpload(contentType: string) {
   return api.post<PresignedUpload>("/api/v1/media/presign", { content_type: contentType });
 }
 
-export function registerMedia(input: {
-  object_key: string;
-  content_type: string;
-  related_type?: "incident" | "result";
-  related_id?: string;
-}) {
+export interface CaptureProof {
+  sha256?: string;
+  captured_at?: string;
+  captured_lat?: number;
+  captured_lng?: number;
+}
+
+export function registerMedia(
+  input: {
+    object_key: string;
+    content_type: string;
+    related_type?: "incident" | "result";
+    related_id?: string;
+  } & CaptureProof,
+) {
   return api.post<Media>("/api/v1/media/register", input);
 }
 
@@ -22,10 +31,14 @@ export function getMediaBatch(ids: string[]) {
 }
 
 /** Presigns, PUTs the file straight to object storage, then registers the
- * resulting object as media. The API server never sees the file bytes. */
+ * resulting object as media. The API server never sees the file bytes.
+ * `proof` carries the watermark/hash metadata for a tamper-evident
+ * capture (see lib/media/watermark.ts) -- omitted for ordinary photo/
+ * video/voice attachments that don't need it. */
 export async function uploadFile(
   file: File,
   related?: { related_type: "incident" | "result"; related_id?: string },
+  proof?: CaptureProof,
 ): Promise<Media> {
   const presigned = await presignUpload(file.type);
   await fetch(presigned.upload_url, {
@@ -37,5 +50,6 @@ export async function uploadFile(
     object_key: presigned.object_key,
     content_type: file.type,
     ...related,
+    ...proof,
   });
 }

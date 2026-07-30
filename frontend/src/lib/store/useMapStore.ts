@@ -10,6 +10,7 @@ interface MapState {
   updateOfficerStatus: (officerId: string, status: OfficerStatus, location?: Location) => void;
   updateOfficerLocation: (officerId: string, location: Location, at: string) => void;
   assignOfficerToPU: (officerId: string, puCode: string) => void;
+  setOfficerAssignedPU: (officerId: string, puCode: string) => void;
 }
 
 export const useMapStore = create<MapState>((set) => ({
@@ -86,5 +87,16 @@ export const useMapStore = create<MapState>((set) => ({
       }
 
       return { officers, pollingUnits };
+    }),
+  // Sub-agent assign/unassign only ever touches the officer's own
+  // assigned_pu_code -- unlike assignOfficerToPU, it never sets or clears
+  // a PU's assigned_officer_id (that field is the primary agent only).
+  setOfficerAssignedPU: (officerId, puCode) =>
+    set((state) => {
+      const officer = state.officers[officerId];
+      if (!officer) return state;
+      return {
+        officers: { ...state.officers, [officerId]: { ...officer, assigned_pu_code: puCode || undefined } },
+      };
     }),
 }));

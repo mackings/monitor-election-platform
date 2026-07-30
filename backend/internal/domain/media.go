@@ -20,7 +20,16 @@ type Media struct {
 	UploadedBy  string      `bson:"uploaded_by" json:"uploaded_by"`
 	RelatedType RelatedType `bson:"related_type,omitempty" json:"related_type,omitempty"`
 	RelatedID   string      `bson:"related_id,omitempty" json:"related_id,omitempty"`
-	CreatedAt   time.Time   `bson:"created_at" json:"created_at"`
+	// SHA256/Captured* back a client-side tamper-evident "proof of
+	// submission": the frontend watermarks the image (timestamp/PU/GPS
+	// burned into the pixels) and hashes the final bytes before upload,
+	// so an admin can later verify this exact image, unaltered, was
+	// captured at this claimed time and place.
+	SHA256      string     `bson:"sha256,omitempty" json:"sha256,omitempty"`
+	CapturedAt  *time.Time `bson:"captured_at,omitempty" json:"captured_at,omitempty"`
+	CapturedLat *float64   `bson:"captured_lat,omitempty" json:"captured_lat,omitempty"`
+	CapturedLng *float64   `bson:"captured_lng,omitempty" json:"captured_lng,omitempty"`
+	CreatedAt   time.Time  `bson:"created_at" json:"created_at"`
 }
 
 type MediaRepository interface {

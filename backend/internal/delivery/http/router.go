@@ -60,6 +60,9 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 				r.Post("/officers", h.Auth.CreateOfficer)
 				r.Get("/officers", h.Officer.List)
 				r.Post("/officers/assign", h.Officer.Assign)
+				r.Post("/officers/assign-sub", h.Officer.AssignSubAgent)
+				r.Post("/officers/unassign", h.Officer.Unassign)
+				r.Post("/results/manual", h.Collation.SubmitManual)
 			})
 
 			// Any authenticated user
@@ -70,6 +73,7 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 			r.Get("/geo/reverse", h.Geo.ReverseGeocode)
 			r.Get("/incidents", h.Incident.List)
 			r.Get("/results/tally", h.Collation.Tally)
+			r.Get("/results", h.Collation.List)
 			r.Get("/activity", h.Activity.List)
 			r.Get("/media", h.Media.List)
 

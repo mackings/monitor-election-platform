@@ -68,6 +68,8 @@ export interface Incident {
   created_at: string;
 }
 
+export type ResultSource = "app" | "sms";
+
 export interface Result {
   id: string;
   pu_code: string;
@@ -76,6 +78,8 @@ export interface Result {
   total_accredited_voters: number;
   media_ids?: string[];
   verified: boolean;
+  source?: ResultSource;
+  logged_by_id?: string;
   submitted_at: string;
 }
 
@@ -108,6 +112,10 @@ export interface Media {
   uploaded_by: string;
   related_type?: "incident" | "result";
   related_id?: string;
+  sha256?: string;
+  captured_at?: string;
+  captured_lat?: number;
+  captured_lng?: number;
   created_at: string;
 }
 

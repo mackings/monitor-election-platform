@@ -9,6 +9,17 @@ export function assignOfficer(officerId: string, puCode: string) {
   return api.post("/api/v1/officers/assign", { officer_id: officerId, pu_code: puCode });
 }
 
+/** Gives an officer access to submit for a PU without making them its
+ * primary -- multiple sub-agents can share a PU with the primary and with
+ * each other, for cross-checkable independent submissions. */
+export function assignSubAgent(officerId: string, puCode: string) {
+  return api.post("/api/v1/officers/assign-sub", { officer_id: officerId, pu_code: puCode });
+}
+
+export function unassignOfficer(officerId: string) {
+  return api.post("/api/v1/officers/unassign", { officer_id: officerId });
+}
+
 export function checkIn(lat: number, lng: number) {
   return api.post("/api/v1/officer/checkin", { lat, lng });
 }

@@ -15,7 +15,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { listActivity, type ActivityRecord } from "@/lib/api/activity";
 import { getMediaBatch } from "@/lib/api/media";
-import { assignOfficer } from "@/lib/api/officers";
+import { assignOfficer, assignSubAgent, unassignOfficer } from "@/lib/api/officers";
+import { listResultsByPU } from "@/lib/api/collation";
 import { buildFeedItem } from "@/lib/activity/feedItem";
 import { KIND_ICON, KIND_CHIP } from "@/lib/activity/activityIcons";
 import { useMapStore } from "@/lib/store/useMapStore";
@@ -24,7 +25,7 @@ import { MediaThumb } from "@/components/dashboard/MediaThumb";
 import type { Incident, Media, PollingUnit, Result } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { Phone, Loader2, UserPlus } from "lucide-react";
+import { Phone, Loader2, UserPlus, UserMinus, MessageSquareText, ClipboardList } from "lucide-react";
 
 function initials(name: string) {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -39,15 +40,19 @@ interface LoadedData {
   puCode: string;
   records: ActivityRecord[];
   mediaMap: Record<string, Media>;
+  results: Result[];
 }
 
 export function PUDetailSheet({ pu, onOpenChange }: PUDetailSheetProps) {
   const officersMap = useMapStore((s) => s.officers);
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
   const assignOfficerToPU = useMapStore((s) => s.assignOfficerToPU);
+  const setOfficerAssignedPU = useMapStore((s) => s.setOfficerAssignedPU);
   const [data, setData] = useState<LoadedData | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [assignKey, setAssignKey] = useState(0);
+  const [subAgentAssigning, setSubAgentAssigning] = useState(false);
+  const [subAgentSelectKey, setSubAgentSelectKey] = useState(0);
 
   // The `pu` prop is a snapshot the parent captured at click time — re-look
   // it up from the store by code so status/assignment changes (from a
@@ -61,6 +66,16 @@ export function PUDetailSheet({ pu, onOpenChange }: PUDetailSheetProps) {
     [officersMap],
   );
 
+  // A sub-agent is just any other officer whose assigned_pu_code matches
+  // this PU -- there's no separate list stored anywhere, it's derived.
+  const subAgents = useMemo(
+    () =>
+      activePU
+        ? officersList.filter((o) => o.assigned_pu_code === activePU.pu_code && o.id !== assignedOfficer?.id)
+        : [],
+    [officersList, activePU, assignedOfficer],
+  );
+
   // data lags one PU behind while a fetch is in flight — rather than
   // clearing state synchronously at the top of the effect (which the
   // set-state-in-effect lint rule flags, and which caused visible
@@ -70,6 +85,7 @@ export function PUDetailSheet({ pu, onOpenChange }: PUDetailSheetProps) {
   const loading = !!pu && stale;
   const records = stale ? [] : (data?.records ?? []);
   const mediaMap = stale ? {} : (data?.mediaMap ?? {});
+  const results = stale ? [] : (data?.results ?? []);
 
   async function handleAssign(officerId: string) {
     if (!activePU) return;
@@ -86,25 +102,57 @@ export function PUDetailSheet({ pu, onOpenChange }: PUDetailSheetProps) {
     }
   }
 
+  async function handleAssignSubAgent(officerId: string) {
+    if (!activePU) return;
+    setSubAgentAssigning(true);
+    try {
+      await assignSubAgent(officerId, activePU.pu_code);
+      setOfficerAssignedPU(officerId, activePU.pu_code);
+      toast.success(`${officersMap[officerId]?.name ?? "Agent"} added as a sub-agent.`);
+    } catch {
+      toast.error("Couldn't add sub-agent. Try again.");
+    } finally {
+      setSubAgentAssigning(false);
+      setSubAgentSelectKey((k) => k + 1);
+    }
+  }
+
+  async function handleRemoveSubAgent(officerId: string) {
+    try {
+      await unassignOfficer(officerId);
+      setOfficerAssignedPU(officerId, "");
+      toast.success(`${officersMap[officerId]?.name ?? "Agent"} removed as sub-agent.`);
+    } catch {
+      toast.error("Couldn't remove sub-agent. Try again.");
+    }
+  }
+
   useEffect(() => {
     if (!pu) return;
     let ignore = false;
 
-    listActivity({ pu_code: pu.pu_code, limit: 100 }).then(async (recs) => {
-      if (ignore) return;
+    Promise.all([listActivity({ pu_code: pu.pu_code, limit: 100 }), listResultsByPU(pu.pu_code)]).then(
+      async ([recs, results]) => {
+        if (ignore) return;
 
-      const mediaIds = new Set<string>();
-      for (const r of recs) {
-        if (r.type === "incident.created") {
-          ((r.payload as Incident).media_ids ?? []).forEach((id) => mediaIds.add(id));
-        } else if (r.type === "result.submitted") {
-          ((r.payload as Result).media_ids ?? []).forEach((id) => mediaIds.add(id));
+        const mediaIds = new Set<string>();
+        for (const r of recs) {
+          if (r.type === "incident.created") {
+            ((r.payload as Incident).media_ids ?? []).forEach((id) => mediaIds.add(id));
+          } else if (r.type === "result.submitted") {
+            ((r.payload as Result).media_ids ?? []).forEach((id) => mediaIds.add(id));
+          }
         }
-      }
-      const media = mediaIds.size > 0 ? await getMediaBatch(Array.from(mediaIds)) : [];
-      if (ignore) return;
-      setData({ puCode: pu.pu_code, records: recs, mediaMap: Object.fromEntries(media.map((m) => [m.id, m])) });
-    });
+        const media = mediaIds.size > 0 ? await getMediaBatch(Array.from(mediaIds)) : [];
+        if (ignore) return;
+        setData({
+          puCode: pu.pu_code,
+          records: recs,
+          mediaMap: Object.fromEntries(media.map((m) => [m.id, m])),
+          results,
+        });
+      },
+    );
 
     return () => {
       ignore = true;
@@ -206,6 +254,118 @@ export function PUDetailSheet({ pu, onOpenChange }: PUDetailSheetProps) {
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                Sub-agents ({subAgents.length})
+              </p>
+              {subAgents.length > 0 && (
+                <div className="mb-2 space-y-2">
+                  {subAgents.map((agent) => (
+                    <div key={agent.id} className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-slate-100 text-xs font-semibold dark:bg-slate-800">
+                          {initials(agent.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{agent.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {agent.phone} · {agent.status}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        nativeButton={false}
+                        render={<a href={`tel:${agent.phone}`} />}
+                      >
+                        <Phone className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="gap-1.5 text-muted-foreground"
+                        onClick={() => handleRemoveSubAgent(agent.id)}
+                        title="Remove as sub-agent"
+                      >
+                        <UserMinus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Select
+                key={subAgentSelectKey}
+                onValueChange={(v) => v && handleAssignSubAgent(v as string)}
+                disabled={subAgentAssigning || officersList.length === 0}
+              >
+                <SelectTrigger className="w-full">
+                  {subAgentAssigning ? (
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Adding…
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <UserPlus className="h-3.5 w-3.5 text-muted-foreground" />
+                      <SelectValue placeholder="Add a sub-agent" />
+                    </span>
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  {officersList
+                    .filter((o) => o.id !== assignedOfficer?.id)
+                    .map((o) => (
+                      <SelectItem key={o.id} value={o.id} disabled={subAgents.some((a) => a.id === o.id)}>
+                        {o.name}
+                        {subAgents.some((a) => a.id === o.id) ? " (already a sub-agent here)" : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {results.length > 0 && (
+              <div className="border-b border-slate-200 p-4 dark:border-slate-800">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Result submissions ({results.length})
+                </p>
+                <div className="space-y-2">
+                  {results.map((res) => {
+                    const submitter = officersMap[res.officer_id];
+                    const totalVotes = Object.values(res.vote_counts).reduce((a, b) => a + b, 0);
+                    return (
+                      <div key={res.id} className="rounded-lg border border-slate-200 p-2.5 text-sm dark:border-slate-800">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate font-medium">{submitter?.name ?? "Unknown agent"}</p>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {res.source === "sms" && (
+                              <span
+                                className="flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                                title="Logged from an SMS/phone report"
+                              >
+                                <MessageSquareText className="h-2.5 w-2.5" />
+                                SMS
+                              </span>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(res.submitted_at), { addSuffix: true })}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {totalVotes} votes across {Object.keys(res.vote_counts).length} candidates ·{" "}
+                          {res.total_accredited_voters} accredited
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 overflow-hidden p-4">
               <p className="mb-2 text-xs font-medium text-muted-foreground">
