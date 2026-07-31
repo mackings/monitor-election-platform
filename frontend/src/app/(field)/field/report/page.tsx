@@ -10,9 +10,10 @@ import { MediaUploader } from "@/components/field/MediaUploader";
 import { VoiceRecorder } from "@/components/field/VoiceRecorder";
 import { useResolvedLocation } from "@/lib/hooks/useResolvedLocation";
 import { createIncident } from "@/lib/api/incidents";
-import { queueIncident } from "@/lib/offline/queue";
+import { queueIncident, PENDING_MEDIA_PREFIX } from "@/lib/offline/queue";
 import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import type { Severity } from "@/types";
@@ -28,6 +29,7 @@ const INCIDENT_TYPES = [
 
 export default function IncidentReportPage() {
   const puCode = useAuthStore((s) => s.user?.assigned_pu_code ?? "");
+  const assignedPU = useAssignedPU();
   const { resolve } = useResolvedLocation();
   const [type, setType] = useState("");
   const [description, setDescription] = useState("");
@@ -51,7 +53,7 @@ export default function IncidentReportPage() {
     setSubmitting(true);
     let lat: number, lng: number, approximate: boolean;
     try {
-      ({ lat, lng, approximate } = await resolve(puCode));
+      ({ lat, lng, approximate } = await resolve(assignedPU));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
       setSubmitting(false);
@@ -69,25 +71,35 @@ export default function IncidentReportPage() {
       lat,
       lng,
     };
-    try {
-      await createIncident(input);
-      toast.success("Incident reported to the dashboard");
+    function resetForm() {
       setType("");
       setDescription("");
       setSeverity("medium");
       setMediaIds([]);
       setVoiceMediaIds([]);
+    }
+    try {
+      if (input.media_ids.some((id) => id.startsWith(PENDING_MEDIA_PREFIX))) {
+        // At least one attachment was captured with no connection and
+        // hasn't uploaded yet -- the server has never heard of that id,
+        // so sending this live now would fail. Queue the whole report;
+        // flushQueue uploads the attachment and submits together once
+        // you're back online, in one step.
+        await queueIncident(input);
+        toast.info("No connection — report saved on this device and will send automatically once you're back online.");
+        resetForm();
+        return;
+      }
+      await createIncident(input);
+      toast.success("Incident reported to the dashboard");
+      resetForm();
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error("Couldn't submit the report — the server rejected it. Check the form and try again.");
       } else {
         await queueIncident(input);
         toast.info("No connection — report saved on this device and will send automatically once you're back online.");
-        setType("");
-        setDescription("");
-        setSeverity("medium");
-        setMediaIds([]);
-        setVoiceMediaIds([]);
+        resetForm();
       }
     } finally {
       setSubmitting(false);

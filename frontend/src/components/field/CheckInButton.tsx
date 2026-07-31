@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { useResolvedLocation } from "@/lib/hooks/useResolvedLocation";
 import { checkIn, checkOut } from "@/lib/api/officers";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { MapPin, LogOut } from "lucide-react";
 
 export function CheckInButton() {
   const { resolve } = useResolvedLocation();
+  const assignedPU = useAssignedPU();
   const user = useAuthStore((s) => s.user);
   const updateLocalStatus = useAuthStore((s) => s.updateLocalStatus);
   const [submitting, setSubmitting] = useState(false);
@@ -34,7 +36,7 @@ export function CheckInButton() {
 
     let lat: number, lng: number, approximate: boolean;
     try {
-      ({ lat, lng, approximate } = await resolve(user?.assigned_pu_code));
+      ({ lat, lng, approximate } = await resolve(assignedPU));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
       setSubmitting(false);

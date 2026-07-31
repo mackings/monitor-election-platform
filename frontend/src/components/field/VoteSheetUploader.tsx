@@ -2,9 +2,11 @@
 
 import { useRef, useState } from "react";
 import { uploadFile } from "@/lib/api/media";
+import { ApiError } from "@/lib/api/client";
+import { queueMedia, dequeueMedia } from "@/lib/offline/queue";
 import { watermarkAndHash } from "@/lib/media/watermark";
 import { useGeolocation } from "@/lib/hooks/useGeolocation";
-import { Camera, X, Loader2, ShieldCheck } from "lucide-react";
+import { Camera, X, Loader2, ShieldCheck, CloudOff } from "lucide-react";
 import { toast } from "sonner";
 
 interface Item {
@@ -12,7 +14,7 @@ interface Item {
   mediaId: string;
   name: string;
   fingerprint: string;
-  status: "stamping" | "uploading" | "done" | "error";
+  status: "stamping" | "uploading" | "done" | "error" | "queued";
 }
 
 /** Like MediaUploader, but for the one photo that matters most: the
@@ -35,7 +37,10 @@ export function VoteSheetUploader({
 
   function notify(next: Item[]) {
     setItems(next);
-    onChange(next.filter((i) => i.status === "done").map((i) => i.mediaId));
+    // See MediaUploader.notify -- "queued" carries a local placeholder id
+    // the offline queue resolves later, and doesn't block submission the
+    // way "stamping"/"uploading" (still in progress) does.
+    onChange(next.filter((i) => i.status === "done" || i.status === "queued").map((i) => i.mediaId));
     onUploadingChange?.(next.some((i) => i.status === "stamping" || i.status === "uploading"));
   }
 
@@ -65,32 +70,49 @@ export function VoteSheetUploader({
     await Promise.all(
       Array.from(files).map(async (file, idx) => {
         const item = newItems[idx];
+        let stamped: File | undefined;
+        let proof: { sha256: string; captured_at: string; captured_lat?: number; captured_lng?: number } | undefined;
         try {
-          const { file: stamped, sha256, capturedAt } = await watermarkAndHash(file, {
-            puCode,
-            lat: location?.lat,
-            lng: location?.lng,
-          });
-          working = working.map((i) => (i.id === item.id ? { ...i, status: "uploading", fingerprint: sha256.slice(0, 10) } : i));
+          const watermarked = await watermarkAndHash(file, { puCode, lat: location?.lat, lng: location?.lng });
+          stamped = watermarked.file;
+          proof = {
+            sha256: watermarked.sha256,
+            captured_at: watermarked.capturedAt,
+            captured_lat: location?.lat,
+            captured_lng: location?.lng,
+          };
+          working = working.map((i) =>
+            i.id === item.id ? { ...i, status: "uploading", fingerprint: watermarked.sha256.slice(0, 10) } : i,
+          );
           notify(working);
 
-          const media = await uploadFile(
-            stamped,
-            { related_type: "result" },
-            { sha256, captured_at: capturedAt, captured_lat: location?.lat, captured_lng: location?.lng },
-          );
+          const media = await uploadFile(stamped, { related_type: "result" }, proof);
           working = working.map((i) => (i.id === item.id ? { ...i, mediaId: media.id, status: "done" } : i));
           notify(working);
-        } catch {
-          working = working.map((i) => (i.id === item.id ? { ...i, status: "error" } : i));
+        } catch (err) {
+          // Watermarking/hashing itself needs no network -- a failure
+          // here (before `stamped` is set) is a real processing error,
+          // not connectivity, so it always surfaces as "Failed."
+          if (!stamped || err instanceof ApiError) {
+            working = working.map((i) => (i.id === item.id ? { ...i, status: "error" } : i));
+            notify(working);
+            toast.error(`Couldn't process ${file.name}`);
+            return;
+          }
+          // Already watermarked/hashed, just couldn't reach the network
+          // -- save the stamped file (with its proof) for later instead
+          // of losing the fingerprinted evidence.
+          const localId = await queueMedia(stamped, "result", proof);
+          working = working.map((i) => (i.id === item.id ? { ...i, mediaId: localId, status: "queued" } : i));
           notify(working);
-          toast.error(`Couldn't process ${file.name}`);
         }
       }),
     );
   }
 
   function removeItem(id: string) {
+    const item = items.find((i) => i.id === id);
+    if (item?.status === "queued") dequeueMedia(item.mediaId).catch(() => {});
     notify(items.filter((i) => i.id !== id));
   }
 
@@ -133,6 +155,15 @@ export function VoteSheetUploader({
                   <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
                     <ShieldCheck className="h-3.5 w-3.5" />
                     <span className="font-mono">{item.fingerprint}</span>
+                  </span>
+                )}
+                {item.status === "queued" && (
+                  <span
+                    className="flex items-center gap-1 text-amber-600 dark:text-amber-400"
+                    title="Saved on this device — will upload once you're back online"
+                  >
+                    <CloudOff className="h-3.5 w-3.5" />
+                    Saved offline
                   </span>
                 )}
                 {item.status === "error" && <span className="text-red-500">Failed</span>}

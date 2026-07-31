@@ -14,11 +14,13 @@ import {
 import { useResolvedLocation } from "@/lib/hooks/useResolvedLocation";
 import { triggerDistress } from "@/lib/api/officers";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { toast } from "sonner";
 import { Radio } from "lucide-react";
 
 export function DistressButton() {
   const { resolve } = useResolvedLocation();
+  const assignedPU = useAssignedPU();
   const puCode = useAuthStore((s) => s.user?.assigned_pu_code ?? "");
   const updateLocalStatus = useAuthStore((s) => s.updateLocalStatus);
   const [open, setOpen] = useState(false);
@@ -28,7 +30,7 @@ export function DistressButton() {
     setSending(true);
     let lat: number, lng: number, approximate: boolean;
     try {
-      ({ lat, lng, approximate } = await resolve(puCode));
+      ({ lat, lng, approximate } = await resolve(assignedPU));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
       setSending(false);

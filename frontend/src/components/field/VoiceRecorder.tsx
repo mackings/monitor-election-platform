@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { uploadFile } from "@/lib/api/media";
-import { Mic, Square, Trash2, Loader2, CheckCircle2, Play, Pause } from "lucide-react";
+import { ApiError } from "@/lib/api/client";
+import { queueMedia, dequeueMedia } from "@/lib/offline/queue";
+import { Mic, Square, Trash2, Loader2, CheckCircle2, Play, Pause, CloudOff } from "lucide-react";
 import { toast } from "sonner";
 
 interface VoiceNote {
@@ -10,7 +12,7 @@ interface VoiceNote {
   mediaId: string;
   url: string;
   durationLabel: string;
-  status: "uploading" | "done" | "error";
+  status: "uploading" | "done" | "error" | "queued";
 }
 
 /** Picks the best-supported recording format -- Chrome/Firefox/Android
@@ -54,7 +56,10 @@ export function VoiceRecorder({
 
   function notify(next: VoiceNote[]) {
     setNotes(next);
-    onChange(next.filter((n) => n.status === "done").map((n) => n.mediaId));
+    // See MediaUploader.notify for why "queued" (a local placeholder id,
+    // resolved later by the offline queue) counts here too, while only
+    // "uploading" blocks submission.
+    onChange(next.filter((n) => n.status === "done" || n.status === "queued").map((n) => n.mediaId));
     onUploadingChange?.(next.some((n) => n.status === "uploading"));
   }
 
@@ -107,22 +112,31 @@ export function VoiceRecorder({
     let working = [...notes, { id, mediaId: "", url, durationLabel, status: "uploading" as const }];
     notify(working);
 
+    const ext = mimeType.includes("mp4") ? "m4a" : "webm";
+    const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: blob.type });
     try {
-      const ext = mimeType.includes("mp4") ? "m4a" : "webm";
-      const file = new File([blob], `voice-note-${Date.now()}.${ext}`, { type: blob.type });
       const media = await uploadFile(file, { related_type: relatedType });
       working = working.map((n) => (n.id === id ? { ...n, mediaId: media.id, status: "done" } : n));
       notify(working);
-    } catch {
-      working = working.map((n) => (n.id === id ? { ...n, status: "error" } : n));
+    } catch (err) {
+      if (err instanceof ApiError) {
+        working = working.map((n) => (n.id === id ? { ...n, status: "error" } : n));
+        notify(working);
+        toast.error("Voice note upload failed.");
+        return;
+      }
+      // No connection -- save it for later instead of losing the
+      // recording; flushQueue uploads it in the background.
+      const localId = await queueMedia(file, relatedType);
+      working = working.map((n) => (n.id === id ? { ...n, mediaId: localId, status: "queued" } : n));
       notify(working);
-      toast.error("Voice note upload failed.");
     }
   }
 
   function removeNote(id: string) {
     const note = notes.find((n) => n.id === id);
     if (note) URL.revokeObjectURL(note.url);
+    if (note?.status === "queued") dequeueMedia(note.mediaId).catch(() => {});
     notify(notes.filter((n) => n.id !== id));
   }
 
@@ -189,6 +203,15 @@ export function VoiceRecorder({
               <div className="flex items-center gap-2">
                 {note.status === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />}
                 {note.status === "done" && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+                {note.status === "queued" && (
+                  <span
+                    className="flex items-center gap-1 text-amber-600 dark:text-amber-400"
+                    title="Saved on this device — will upload once you're back online"
+                  >
+                    <CloudOff className="h-3.5 w-3.5" />
+                    Saved offline
+                  </span>
+                )}
                 {note.status === "error" && <span className="text-red-500">Failed</span>}
                 <button type="button" onClick={() => removeNote(note.id)} aria-label="Remove">
                   <Trash2 className="h-3.5 w-3.5 text-slate-400" />

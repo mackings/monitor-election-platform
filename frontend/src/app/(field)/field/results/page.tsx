@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { VoteSheetUploader } from "@/components/field/VoteSheetUploader";
 import { submitResult } from "@/lib/api/collation";
-import { queueResult } from "@/lib/offline/queue";
+import { queueResult, PENDING_MEDIA_PREFIX } from "@/lib/offline/queue";
 import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useAssignedPU } from "@/components/field/AssignedPUContext";
@@ -87,13 +87,25 @@ export default function ResultEntryPage() {
       total_accredited_voters: Number(accredited) || 0,
       media_ids: mediaIds,
     };
-    setSubmitting(true);
-    try {
-      await submitResult(input);
-      toast.success("Result sheet submitted for collation");
+    function resetForm() {
       setRows([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
       setAccredited("");
       setMediaIds([]);
+    }
+    setSubmitting(true);
+    try {
+      if (mediaIds.some((id) => id.startsWith(PENDING_MEDIA_PREFIX))) {
+        // The result-sheet photo was captured with no connection and
+        // hasn't uploaded yet -- queue the whole submission; flushQueue
+        // uploads the photo and submits together once you're back online.
+        await queueResult(input);
+        toast.info("No connection — result saved on this device and will send automatically once you're back online.");
+        resetForm();
+        return;
+      }
+      await submitResult(input);
+      toast.success("Result sheet submitted for collation");
+      resetForm();
     } catch (err) {
       if (err instanceof ApiError) {
         toast.error("Couldn't submit results — the server rejected it. Check the form and try again.");
@@ -104,9 +116,7 @@ export default function ResultEntryPage() {
             ? "No connection — figures saved on this device without a photo. They'll send automatically once you're back online; attach the photo in a follow-up report if needed."
             : "No connection — result saved on this device and will send automatically once you're back online.",
         );
-        setRows([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
-        setAccredited("");
-        setMediaIds([]);
+        resetForm();
       }
     } finally {
       setSubmitting(false);
