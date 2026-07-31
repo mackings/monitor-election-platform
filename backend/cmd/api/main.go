@@ -17,6 +17,7 @@ import (
 	"monitor/backend/internal/delivery/ws"
 	"monitor/backend/internal/domain"
 	mongorepo "monitor/backend/internal/repository/mongo"
+	pollingunitrepo "monitor/backend/internal/repository/pollingunit"
 	"monitor/backend/internal/repository/storage"
 	"monitor/backend/internal/usecase/activity"
 	"monitor/backend/internal/usecase/auth"
@@ -41,14 +42,14 @@ func main() {
 	defer disconnect(context.Background())
 
 	userRepo := mongorepo.NewUserRepository(db)
-	puRepo := mongorepo.NewPollingUnitRepository(db)
-	if err := puRepo.EnsureIndexes(context.Background()); err != nil {
-		log.Fatalf("ensure indexes: %v", err)
+	puRepo, err := pollingunitrepo.New(db, cfg.PUDataPath)
+	if err != nil {
+		log.Fatalf("load polling units: %v", err)
 	}
 	statusEventRepo := mongorepo.NewStatusEventRepository(db)
 	incidentRepo := mongorepo.NewIncidentRepository(db)
 	mediaRepo := mongorepo.NewMediaRepository(db)
-	resultRepo := mongorepo.NewResultRepository(db)
+	resultRepo := mongorepo.NewResultRepository(db, puRepo)
 	activityRepo := mongorepo.NewActivityRepository(db)
 	if err := activityRepo.EnsureIndexes(context.Background()); err != nil {
 		log.Fatalf("ensure activity indexes: %v", err)

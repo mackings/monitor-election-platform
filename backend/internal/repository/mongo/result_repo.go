@@ -41,12 +41,12 @@ func (d *resultDoc) toDomain() *domain.Result {
 }
 
 type ResultRepository struct {
-	col   *mongo.Collection
-	puCol *mongo.Collection
+	col    *mongo.Collection
+	puRepo domain.PollingUnitRepository
 }
 
-func NewResultRepository(db *mongo.Database) *ResultRepository {
-	return &ResultRepository{col: db.Collection("results"), puCol: db.Collection("polling_units")}
+func NewResultRepository(db *mongo.Database, puRepo domain.PollingUnitRepository) *ResultRepository {
+	return &ResultRepository{col: db.Collection("results"), puRepo: puRepo}
 }
 
 // Create inserts a new submission rather than replacing any prior one for
@@ -111,6 +111,26 @@ func (r *ResultRepository) ListByPU(ctx context.Context, puCode string) ([]*doma
 	return results, cur.Err()
 }
 
+// ListAll returns every submission across every PU, newest first.
+func (r *ResultRepository) ListAll(ctx context.Context) ([]*domain.Result, error) {
+	opts := options.Find().SetSort(bson.D{{Key: "submitted_at", Value: -1}})
+	cur, err := r.col.Find(ctx, bson.M{}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	results := []*domain.Result{}
+	for cur.Next(ctx) {
+		var doc resultDoc
+		if err := cur.Decode(&doc); err != nil {
+			return nil, err
+		}
+		results = append(results, doc.toDomain())
+	}
+	return results, cur.Err()
+}
+
 // Tally aggregates submitted results by pu/ward/lga/state. Grouping happens
 // in application code (rather than a Mongo pipeline) because vote_counts
 // keys are dynamic per-candidate and easiest to sum in Go.
@@ -119,12 +139,11 @@ func (r *ResultRepository) ListByPU(ctx context.Context, puCode string) ([]*doma
 // first collapses to the single latest submission per PU before summing
 // upward -- otherwise a PU with two agents reporting would silently count
 // twice toward its ward/LGA/state totals.
-func (r *ResultRepository) Tally(ctx context.Context, level domain.TallyLevel) ([]*domain.TallyRow, error) {
-	puCursor, err := r.puCol.Find(ctx, bson.M{})
+func (r *ResultRepository) Tally(ctx context.Context, level domain.TallyLevel, filter domain.TallyFilter) ([]*domain.TallyRow, error) {
+	pus, err := r.puRepo.List(ctx, filter.LGA, filter.Ward)
 	if err != nil {
 		return nil, err
 	}
-	defer puCursor.Close(ctx)
 
 	type puMeta struct{ Ward, LGA, State string }
 	puByCode := map[string]puMeta{}
@@ -141,15 +160,11 @@ func (r *ResultRepository) Tally(ctx context.Context, level domain.TallyLevel) (
 		}
 	}
 	totalUnitsByKey := map[string]int{}
-	for puCursor.Next(ctx) {
-		var doc puDoc
-		if err := puCursor.Decode(&doc); err != nil {
-			return nil, err
-		}
-		meta := puMeta{Ward: doc.Ward, LGA: doc.LGA, State: doc.State}
-		puByCode[doc.PUCode] = meta
+	for _, pu := range pus {
+		meta := puMeta{Ward: pu.Ward, LGA: pu.LGA, State: pu.State}
+		puByCode[pu.PUCode] = meta
 		if level == domain.TallyPU {
-			totalUnitsByKey[doc.PUCode]++
+			totalUnitsByKey[pu.PUCode]++
 		} else {
 			totalUnitsByKey[keyOf(meta)]++
 		}
@@ -179,7 +194,12 @@ func (r *ResultRepository) Tally(ctx context.Context, level domain.TallyLevel) (
 	}
 	rows := map[string]*acc{}
 	for _, doc := range latestByPU {
-		meta := puByCode[doc.PUCode]
+		meta, inScope := puByCode[doc.PUCode]
+		if !inScope {
+			// Either the PU doesn't exist or the filter (lga/ward) scoped
+			// it out -- either way it's not part of this tally.
+			continue
+		}
 		key := doc.PUCode
 		if level != domain.TallyPU {
 			key = keyOf(meta)

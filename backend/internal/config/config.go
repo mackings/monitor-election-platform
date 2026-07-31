@@ -26,6 +26,7 @@ type Config struct {
 	SMTPFromName    string
 	AppURL          string
 	LocationIQKey   string
+	PUDataPath      string
 }
 
 func envOr(key, def string) string {
@@ -60,5 +61,6 @@ func Load() *Config {
 		SMTPFromName:    envOr("SMTP_FROM_NAME", "Election Monitor"),
 		AppURL:          envOr("APP_URL", "http://localhost:3002"),
 		LocationIQKey:   envOr("LOCATIONIQ_API_KEY", ""),
+		PUDataPath:      envOr("PU_DATA_PATH", "data/oyo_polling_units.json"),
 	}
 }

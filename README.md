@@ -33,19 +33,16 @@ dashboard sees it all live on a map.
    Listens on `:8081` by default. On startup it configures CORS on the R2
    bucket so browsers can upload directly to it via presigned URLs.
 
-3. Seed real Oyo State polling-unit data (pulled from the public
-   `election.yardcode.ng` API by sweeping a coordinate grid):
-   ```
-   cd backend
-   go run ./cmd/seed --step-km 4 --top 20
-   ```
-   Start with a larger `--step-km` (coarser/faster) for local dev; lower it
-   to densify coverage.
+3. Polling-unit data is static and file-backed — no seed step needed. All
+   6,390 Oyo State polling units (name, ward, LGA, coordinates) load from
+   `backend/data/oyo_polling_units.json` at API startup (override the path
+   with `PU_DATA_PATH`). Only what changes during election day — status,
+   officer assignment — lives in Mongo, in the `polling_unit_state`
+   collection, keyed by `pu_code`.
 
 4. Bootstrap an admin user (no self-registration by design — see
    `internal/usecase/auth`): insert a `users` document with
-   `role: "admin"` and a bcrypt `password_hash` directly into Mongo, or
-   extend the seed tooling to do this for you.
+   `role: "admin"` and a bcrypt `password_hash` directly into Mongo.
 
 5. Run the frontend:
    ```

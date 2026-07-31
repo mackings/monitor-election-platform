@@ -32,7 +32,6 @@ type PollingUnit struct {
 }
 
 type PollingUnitRepository interface {
-	Upsert(ctx context.Context, pu *PollingUnit) error
 	List(ctx context.Context, lga, ward string) ([]*PollingUnit, error)
 	FindByCode(ctx context.Context, code string) (*PollingUnit, error)
 	AssignOfficer(ctx context.Context, code, officerID string) error
