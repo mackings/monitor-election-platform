@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Space_Grotesk, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import { Toaster } from "@/components/ui/sonner";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
 
 // App-wide pairing (previously the field officer UI only, now applied
 // everywhere for a consistent identity): a geometric display face for
@@ -32,6 +33,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Election Monitor",
   description: "Real-time field-officer and polling-unit monitoring",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Election Monitor",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#4f46e5",
 };
 
 export default function RootLayout({
@@ -47,6 +57,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         {children}
         <Toaster richColors position="top-center" />
+        <ServiceWorkerRegister />
       </body>
     </html>
   );
