@@ -115,7 +115,13 @@ export function LogSmsResultDialog({ onLogged }: { onLogged?: () => void }) {
               <Label>Agent</Label>
               <Select value={officerId} onValueChange={(v) => setOfficerId(v ?? "")} required>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select the agent who reported this" />
+                  <SelectValue placeholder="Select the agent who reported this">
+                    {(value: string) => {
+                      const o = officersMap[value];
+                      if (!o) return null;
+                      return `${o.name} — ${pollingUnitsMap[o.assigned_pu_code!]?.pu_name ?? o.assigned_pu_code}`;
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {officersList.map((o) => (

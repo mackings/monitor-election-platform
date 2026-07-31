@@ -23,7 +23,6 @@ interface Row {
 export default function ResultEntryPage() {
   const puCode = useAuthStore((s) => s.user?.assigned_pu_code ?? "");
   const assignedPU = useAssignedPU();
-  const puName = assignedPU?.pu_name || puCode;
   const [rows, setRows] = useState<Row[]>([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
   const [accredited, setAccredited] = useState("");
   const [mediaIds, setMediaIds] = useState<string[]>([]);
@@ -47,11 +46,18 @@ export default function ResultEntryPage() {
       toast.error("You have no assigned polling unit yet.");
       return;
     }
+    if (!assignedPU) {
+      // Rather than silently fall back to the bare pu_code -- an admin
+      // reading the text can't act on a code the way they can a name --
+      // just ask for a moment; AssignedPUContext is still resolving it.
+      toast.error("Still loading your polling unit info — try again in a moment.");
+      return;
+    }
     if (!hasSmsCollationNumber()) {
       toast.error("SMS submission isn't set up for this deployment yet.");
       return;
     }
-    const body = buildResultSmsBody({ puName, accreditedVoters: accredited, voteCounts: rows });
+    const body = buildResultSmsBody({ puName: assignedPU.pu_name, accreditedVoters: accredited, voteCounts: rows });
     window.location.href = buildResultSmsLink(body);
   }
 
