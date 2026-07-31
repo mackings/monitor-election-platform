@@ -14,3 +14,20 @@ func HaversineKm(lat1, lng1, lat2, lng2 float64) float64 {
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 	return earthRadiusKm * c
 }
+
+// BBox is a lat/lng bounding box.
+type BBox struct {
+	MinLat, MaxLat float64
+	MinLng, MaxLng float64
+}
+
+func (b BBox) Contains(lat, lng float64) bool {
+	return lat >= b.MinLat && lat <= b.MaxLat && lng >= b.MinLng && lng <= b.MaxLng
+}
+
+// OyoStateBBox is a generous bounding box covering Oyo State, Nigeria --
+// wide enough to tolerate IP geolocation's coarse imprecision, but narrow
+// enough to reject a result that's clearly nowhere near the state (e.g. an
+// ISP whose IP block is administratively registered in Lagos regardless of
+// where the connection actually is).
+var OyoStateBBox = BBox{MinLat: 7.20, MaxLat: 9.20, MinLng: 2.90, MaxLng: 4.60}

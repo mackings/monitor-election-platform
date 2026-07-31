@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"monitor/backend/pkg/geo"
 	"monitor/backend/pkg/geocode"
 	"monitor/backend/pkg/httpresp"
 	"monitor/backend/pkg/ipgeo"
@@ -59,6 +60,16 @@ func (h *GeoHandler) IPLocation(w http.ResponseWriter, r *http.Request) {
 	result, err := h.ipgeo.Lookup(r.Context(), clientIP(r))
 	if err != nil {
 		httpresp.Error(w, http.StatusBadGateway, "couldn't determine an approximate location for your network")
+		return
+	}
+	if !geo.OyoStateBBox.Contains(result.Lat, result.Lng) {
+		// IP geolocation in Nigeria is often only accurate to "which city
+		// the ISP's block is administratively registered in" -- a result
+		// outside the state entirely is worse than useless for "near me"
+		// (it'd pan the map to an empty area with no polling units and
+		// still claim to show the "nearest" ones), so treat it the same
+		// as not having a location at all.
+		httpresp.Error(w, http.StatusBadGateway, "couldn't determine an approximate location within Oyo State for your network")
 		return
 	}
 	httpresp.JSON(w, http.StatusOK, map[string]any{"lat": result.Lat, "lng": result.Lng, "city": result.City})
