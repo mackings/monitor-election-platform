@@ -1,136 +1,143 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { getTally } from "@/lib/api/collation";
 import { useMapStore } from "@/lib/store/useMapStore";
+import { useCollationStore } from "@/lib/store/useCollationStore";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { StatTile } from "@/components/dashboard/StatTile";
 import { LogSmsResultDialog } from "@/components/dashboard/LogSmsResultDialog";
-import type { TallyRow } from "@/types";
+import { PUVotesList, type PUVoteItem } from "@/components/dashboard/charts/PUVotesList";
+import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
+import { Radio, Vote, CheckCircle2, Clock, ChevronRight } from "lucide-react";
+import type { PollingUnit, TallyRow } from "@/types";
 
-const LEVELS = [
-  { value: "ward", label: "By ward" },
-  { value: "lga", label: "By LGA" },
-  { value: "state", label: "Statewide" },
-  { value: "pu", label: "By polling unit" },
-] as const;
+// This dashboard tracks one party at a glance, per how it's actually
+// used -- everyone reading it wants APM's numbers, not a general-purpose
+// multi-party comparison.
+const TRACKED_PARTY = "APM";
+
+interface TallyData {
+  version: number;
+  stateRow: TallyRow | null;
+  puRows: TallyRow[];
+}
 
 export default function CollationPage() {
-  const [level, setLevel] = useState<(typeof LEVELS)[number]["value"]>("lga");
-  const [rows, setRows] = useState<TallyRow[]>([]);
-  const [fetchedLevel, setFetchedLevel] = useState<typeof level | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const loading = fetchedLevel !== level;
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
+  const resultsVersion = useCollationStore((s) => s.resultsVersion);
+
+  // Keyed by version rather than reset synchronously in the effect body --
+  // stale data is treated as "still loading" until the fetch resolves.
+  const [data, setData] = useState<TallyData | null>(null);
+  const [selected, setSelected] = useState<PollingUnit | undefined>();
 
   useEffect(() => {
     let ignore = false;
-    getTally(level).then((data) => {
+    Promise.all([getTally("state"), getTally("pu")]).then(([stateRows, puRows]) => {
       if (ignore) return;
-      setRows(data);
-      setFetchedLevel(level);
+      setData({ version: resultsVersion, stateRow: stateRows[0] ?? null, puRows });
     });
     return () => {
       ignore = true;
     };
-  }, [level, refreshKey]);
+  }, [resultsVersion]);
 
-  const candidates = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => Object.keys(r.vote_counts ?? {}).forEach((c) => set.add(c)));
-    return Array.from(set);
-  }, [rows]);
+  const stale = data?.version !== resultsVersion;
+  const stateRow = stale ? null : data?.stateRow ?? null;
+  const puRows = useMemo(() => (stale ? [] : (data?.puRows ?? [])), [stale, data]);
+
+  const totalVotes = stateRow?.vote_counts?.[TRACKED_PARTY] ?? 0;
+  const reportingCodes = useMemo(() => new Set(puRows.map((r) => r.key)), [puRows]);
+
+  const recording: PUVoteItem[] = useMemo(
+    () =>
+      puRows
+        .map((r) => {
+          const pu = pollingUnitsMap[r.key];
+          return {
+            code: r.key,
+            name: pu?.pu_name ?? r.key,
+            lga: pu?.lga ?? "",
+            ward: pu?.ward ?? "",
+            votes: r.vote_counts?.[TRACKED_PARTY] ?? 0,
+          };
+        })
+        .filter((p) => p.votes > 0)
+        .sort((a, b) => b.votes - a.votes),
+    [puRows, pollingUnitsMap],
+  );
+
+  const notRecordingCount = useMemo(
+    () => Object.values(pollingUnitsMap).filter((pu) => !reportingCodes.has(pu.pu_code)).length,
+    [pollingUnitsMap, reportingCodes],
+  );
 
   return (
     <div className="space-y-4 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-2xl font-bold tracking-tight">Collation</h1>
-          <p className="text-sm text-muted-foreground">
-            Running tally from result sheets submitted by field agents.
-          </p>
+          <div className="flex items-center gap-2">
+            <h1 className="font-heading text-2xl font-bold tracking-tight">Collation — {TRACKED_PARTY}</h1>
+            <span
+              className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+              title="Updates automatically as new results come in"
+            >
+              <Radio className="h-3 w-3 animate-pulse" />
+              Live
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">Every polling unit, at a glance.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <LogSmsResultDialog onLogged={() => setRefreshKey((k) => k + 1)} />
-          <Select value={level} onValueChange={(v) => setLevel(v as typeof level)}>
-            <SelectTrigger className="w-44 rounded-xl">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LEVELS.map((l) => (
-                <SelectItem key={l.value} value={l.value}>
-                  {l.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <LogSmsResultDialog onLogged={() => useCollationStore.getState().bumpResultsVersion()} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        <StatTile
+          label={`Total ${TRACKED_PARTY} votes`}
+          value={totalVotes.toLocaleString()}
+          icon={Vote}
+          href="/collation/votes"
+        />
+        <StatTile
+          label="Recording votes"
+          value={recording.length.toLocaleString()}
+          icon={CheckCircle2}
+          tone="success"
+          href="/collation/votes"
+        />
+        <StatTile
+          label="Not recording yet"
+          value={notRecordingCount.toLocaleString()}
+          icon={Clock}
+          tone="warning"
+          href="/collation/not-recording"
+        />
       </div>
 
       <Card className="rounded-2xl border-slate-200/70 dark:border-slate-800">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{level === "pu" ? "Polling unit" : level.toUpperCase()}</TableHead>
-                {candidates.map((c) => (
-                  <TableHead key={c} className="text-right">
-                    {c}
-                  </TableHead>
-                ))}
-                <TableHead className="text-right">Accredited voters</TableHead>
-                <TableHead className="w-40">Reporting</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.key}>
-                  <TableCell className="font-medium">
-                    {level === "pu" ? (pollingUnitsMap[row.key]?.pu_name ?? row.key) : row.key}
-                  </TableCell>
-                  {candidates.map((c) => (
-                    <TableCell key={c} className="text-right tabular-nums">
-                      {row.vote_counts?.[c] ?? 0}
-                    </TableCell>
-                  ))}
-                  <TableCell className="text-right tabular-nums">
-                    {row.total_accredited_voters}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Progress
-                        value={row.total_units ? (row.reporting_units / row.total_units) * 100 : 0}
-                        className="h-1.5"
-                      />
-                      <span className="w-14 shrink-0 text-xs text-muted-foreground">
-                        {row.reporting_units}/{row.total_units}
-                      </span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {!loading && rows.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={candidates.length + 3}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    No results submitted yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+        <CardContent className="py-4">
+          <div className="mb-3 flex items-center gap-3">
+            <p className="text-sm font-semibold">Polling units recording {TRACKED_PARTY} votes</p>
+            <Link
+              href="/collation/recording"
+              className="flex items-center text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+            >
+              View all
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+          <PUVotesList
+            items={recording}
+            emptyLabel="No polling units have recorded votes yet."
+            maxHeightClass="h-[calc(100vh-20rem)]"
+            onSelect={(code) => setSelected(pollingUnitsMap[code])}
+          />
         </CardContent>
       </Card>
+
+      <PUDetailSheet pu={selected ?? null} onOpenChange={(open) => !open && setSelected(undefined)} />
     </div>
   );
 }

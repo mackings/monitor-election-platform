@@ -41,9 +41,16 @@ func (h *CollationHandler) Submit(w http.ResponseWriter, r *http.Request) {
 	httpresp.JSON(w, http.StatusCreated, result)
 }
 
+// Tally supports optional lga/ward query params to scope aggregation for
+// the collation dashboard's drill-down (e.g. level=ward&lga=X for just
+// that LGA's wards) -- omitted, it aggregates statewide.
 func (h *CollationHandler) Tally(w http.ResponseWriter, r *http.Request) {
 	level := domain.TallyLevel(r.URL.Query().Get("level"))
-	rows, err := h.collation.Tally(r.Context(), level)
+	filter := domain.TallyFilter{
+		LGA:  r.URL.Query().Get("lga"),
+		Ward: r.URL.Query().Get("ward"),
+	}
+	rows, err := h.collation.Tally(r.Context(), level, filter)
 	if err != nil {
 		httpresp.Error(w, http.StatusInternalServerError, err.Error())
 		return
@@ -51,14 +58,21 @@ func (h *CollationHandler) Tally(w http.ResponseWriter, r *http.Request) {
 	httpresp.JSON(w, http.StatusOK, rows)
 }
 
-// List returns every submission for a PU (newest first): GET /results?pu_code=
+// List returns every submission for a PU (newest first) when pu_code is
+// given: GET /results?pu_code=. Without it, returns every submission
+// statewide, newest first -- the audit view of where votes came from and
+// who reported them.
 func (h *CollationHandler) List(w http.ResponseWriter, r *http.Request) {
 	puCode := r.URL.Query().Get("pu_code")
-	if puCode == "" {
-		httpresp.Error(w, http.StatusBadRequest, "pu_code query param is required")
-		return
+	var (
+		results []*domain.Result
+		err     error
+	)
+	if puCode != "" {
+		results, err = h.collation.ListByPU(r.Context(), puCode)
+	} else {
+		results, err = h.collation.ListAll(r.Context())
 	}
-	results, err := h.collation.ListByPU(r.Context(), puCode)
 	if err != nil {
 		httpresp.Error(w, http.StatusInternalServerError, err.Error())
 		return

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -7,6 +8,8 @@ interface StatTileProps {
   value: string | number;
   icon: LucideIcon;
   tone?: "default" | "warning" | "danger" | "success";
+  /** When set, the whole tile becomes a link -- e.g. a count that drills into its own page. */
+  href?: string;
 }
 
 const TONE_STYLES: Record<NonNullable<StatTileProps["tone"]>, string> = {
@@ -16,9 +19,14 @@ const TONE_STYLES: Record<NonNullable<StatTileProps["tone"]>, string> = {
   success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
 };
 
-export function StatTile({ label, value, icon: Icon, tone = "default" }: StatTileProps) {
-  return (
-    <Card className="rounded-2xl border-slate-200/70 shadow-sm dark:border-slate-800">
+export function StatTile({ label, value, icon: Icon, tone = "default", href }: StatTileProps) {
+  const card = (
+    <Card
+      className={cn(
+        "rounded-2xl border-slate-200/70 shadow-sm dark:border-slate-800",
+        href && "transition-colors hover:border-slate-300 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-slate-900",
+      )}
+    >
       <CardContent className="flex items-center gap-3.5 py-2">
         <div className={cn("rounded-xl p-2.5", TONE_STYLES[tone])}>
           <Icon className="h-5 w-5" />
@@ -29,5 +37,12 @@ export function StatTile({ label, value, icon: Icon, tone = "default" }: StatTil
         </div>
       </CardContent>
     </Card>
+  );
+
+  if (!href) return card;
+  return (
+    <Link href={href} className="block">
+      {card}
+    </Link>
   );
 }

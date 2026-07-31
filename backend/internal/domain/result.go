@@ -51,6 +51,14 @@ type TallyRow struct {
 	TotalUnits            int            `json:"total_units"`
 }
 
+// TallyFilter narrows the PU set a Tally call aggregates over -- e.g. only
+// the wards within one LGA, for the collation dashboard's drill-down.
+// Zero-value (both fields empty) means no filtering.
+type TallyFilter struct {
+	LGA  string
+	Ward string
+}
+
 type ResultRepository interface {
 	Create(ctx context.Context, r *Result) error
 	FindByPU(ctx context.Context, puCode string) (*Result, error)
@@ -59,5 +67,9 @@ type ResultRepository interface {
 	// agent plus any sub-agents) need to be shown side by side for
 	// cross-checking rather than collapsed to just the latest one.
 	ListByPU(ctx context.Context, puCode string) ([]*Result, error)
-	Tally(ctx context.Context, level TallyLevel) ([]*TallyRow, error)
+	// ListAll returns every submission across every PU, newest first -- for
+	// a statewide audit view (which PU, who reported it, when) rather than
+	// one PU's cross-check history.
+	ListAll(ctx context.Context) ([]*Result, error)
+	Tally(ctx context.Context, level TallyLevel, filter TallyFilter) ([]*TallyRow, error)
 }

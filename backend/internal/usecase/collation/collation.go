@@ -62,9 +62,16 @@ func (u *Usecase) ListByPU(ctx context.Context, puCode string) ([]*domain.Result
 	return u.results.ListByPU(ctx, puCode)
 }
 
-func (u *Usecase) Tally(ctx context.Context, level domain.TallyLevel) ([]*domain.TallyRow, error) {
+// ListAll returns every submission across every PU, newest first -- powers
+// the statewide "where did the votes come from, who reported them" audit
+// view.
+func (u *Usecase) ListAll(ctx context.Context) ([]*domain.Result, error) {
+	return u.results.ListAll(ctx)
+}
+
+func (u *Usecase) Tally(ctx context.Context, level domain.TallyLevel, filter domain.TallyFilter) ([]*domain.TallyRow, error) {
 	if level == "" {
 		level = domain.TallyLGA
 	}
-	return u.results.Tally(ctx, level)
+	return u.results.Tally(ctx, level, filter)
 }
