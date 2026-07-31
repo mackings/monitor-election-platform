@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
-import { useGeolocation } from "@/lib/hooks/useGeolocation";
+import { useApproximateLocation } from "@/lib/hooks/useApproximateLocation";
 import { haversineKm } from "@/lib/geo/distance";
 import { StatTile } from "@/components/dashboard/StatTile";
 import { LiveActivityFeed } from "@/components/dashboard/LiveActivityFeed";
@@ -48,7 +48,7 @@ export default function DashboardOverviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   const [userLocation, setUserLocation] = useState<FocusTarget | null>(null);
-  const { locate, loading: locating } = useGeolocation();
+  const { locate, loading: locating } = useApproximateLocation();
 
   // Debounced so the expensive filter (scanning ~3,400+ records) and the
   // map re-styling it triggers only run once typing pauses, not on every
@@ -90,9 +90,12 @@ export default function DashboardOverviewPage() {
 
   async function handleLocateMe() {
     try {
-      const { lat, lng } = await locate({ enableHighAccuracy: false, timeoutMs: 15000 });
+      const { lat, lng, approximate } = await locate({ timeoutMs: 15000 });
       setUserLocation({ lat, lng });
       setFocusTarget({ lat, lng });
+      if (approximate) {
+        toast.info("Couldn't get your device's exact location — using your network's approximate location instead.");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
     }

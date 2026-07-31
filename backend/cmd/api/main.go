@@ -27,6 +27,7 @@ import (
 	"monitor/backend/internal/usecase/officer"
 	"monitor/backend/internal/usecase/pollingunit"
 	"monitor/backend/pkg/geocode"
+	"monitor/backend/pkg/ipgeo"
 	"monitor/backend/pkg/jwtutil"
 	"monitor/backend/pkg/mailer"
 )
@@ -101,7 +102,7 @@ func main() {
 		Media:       handler.NewMediaHandler(mediaUC),
 		Collation:   handler.NewCollationHandler(collationUC),
 		Activity:    handler.NewActivityHandler(activityUC),
-		Geo:         handler.NewGeoHandler(geocode.NewClient(cfg.LocationIQKey)),
+		Geo:         handler.NewGeoHandler(geocode.NewClient(cfg.LocationIQKey), ipgeo.NewClient()),
 		WS:          handler.NewWSHandler(hub, tokens),
 	}
 

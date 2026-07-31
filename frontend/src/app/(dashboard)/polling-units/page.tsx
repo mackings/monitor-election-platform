@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
-import { useGeolocation } from "@/lib/hooks/useGeolocation";
+import { useApproximateLocation } from "@/lib/hooks/useApproximateLocation";
 import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
 import { haversineKm } from "@/lib/geo/distance";
 import { Card, CardContent } from "@/components/ui/card";
@@ -85,7 +85,7 @@ export default function PollingUnitsPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<PollingUnit | undefined>();
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const { locate, loading: locating } = useGeolocation();
+  const { locate, loading: locating } = useApproximateLocation();
 
   // Keeps the URL in sync so the current filter set can be copied/
   // bookmarked/shared with another admin and reopened exactly as left.
@@ -174,9 +174,12 @@ export default function PollingUnitsPage() {
 
   async function handleLocateMe() {
     try {
-      const { lat, lng } = await locate({ enableHighAccuracy: false, timeoutMs: 15000 });
+      const { lat, lng, approximate } = await locate({ timeoutMs: 15000 });
       setUserLocation({ lat, lng });
       setPage(1);
+      if (approximate) {
+        toast.info("Couldn't get your device's exact location — using your network's approximate location instead.");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
     }

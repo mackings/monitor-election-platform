@@ -71,6 +71,7 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 			r.Get("/polling-units/overview", h.PollingUnit.Overview)
 			r.Get("/polling-units/{code}", h.PollingUnit.Get)
 			r.Get("/geo/reverse", h.Geo.ReverseGeocode)
+			r.Get("/geo/ip-location", h.Geo.IPLocation)
 			r.Get("/incidents", h.Incident.List)
 			r.Get("/results/tally", h.Collation.Tally)
 			r.Get("/results", h.Collation.List)
