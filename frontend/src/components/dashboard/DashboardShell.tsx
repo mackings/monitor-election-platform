@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { Sidebar } from "./Sidebar";
 import { useLiveEvents } from "@/lib/ws/useLiveEvents";
+import { liveSocket } from "@/lib/ws/socket";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useIncidentStore } from "@/lib/store/useIncidentStore";
+import { useCollationStore } from "@/lib/store/useCollationStore";
+import { useRefetchOnForeground } from "@/lib/hooks/useRefetchOnForeground";
 import { listPollingUnits } from "@/lib/api/pollingUnits";
 import { listOfficers } from "@/lib/api/officers";
 import { listIncidents } from "@/lib/api/incidents";
@@ -18,8 +21,9 @@ function DashboardData({ children }: { children: React.ReactNode }) {
   const setOfficers = useMapStore((s) => s.setOfficers);
   const setIncidents = useIncidentStore((s) => s.setIncidents);
   const hydrateFeed = useIncidentStore((s) => s.hydrateFeed);
+  const bumpResultsVersion = useCollationStore((s) => s.bumpResultsVersion);
 
-  useEffect(() => {
+  const loadAll = useCallback(() => {
     listIncidents({ limit: 50 }).then(setIncidents).catch(() => {});
 
     // Fetched together (rather than reading the map/officer stores, which
@@ -43,7 +47,27 @@ function DashboardData({ children }: { children: React.ReactNode }) {
         hydrateFeed(items);
       })
       .catch(() => {});
-  }, [setPollingUnits, setOfficers, setIncidents, hydrateFeed]);
+
+    // Views keyed off resultsVersion (the Collation page and its
+    // drill-downs) otherwise only refresh on a live WS push -- which may
+    // have quietly stopped arriving if the socket died while the tab was
+    // away.
+    bumpResultsVersion();
+  }, [setPollingUnits, setOfficers, setIncidents, hydrateFeed, bumpResultsVersion]);
+
+  useEffect(() => {
+    loadAll();
+  }, [loadAll]);
+
+  // The tab coming back into the foreground after being backgrounded/asleep
+  // for a while is the one signal a silently-dead WebSocket can't give us
+  // itself -- nudge it to reconnect (a no-op if it's already open) and
+  // pull a fresh snapshot of everything rather than trusting hours-old
+  // state plus whatever events happened to arrive.
+  useRefetchOnForeground(() => {
+    liveSocket.connect();
+    loadAll();
+  });
 
   return <>{children}</>;
 }

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { clearToken, getToken, setToken } from "@/lib/api/client";
+import { useSessionStore } from "@/lib/store/useSessionStore";
 import type { OfficerStatus, User } from "@/types";
 
 interface AuthState {
@@ -36,6 +37,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     clearToken();
     if (typeof window !== "undefined") localStorage.removeItem("monitor_user");
     set({ token: null, user: null });
+    // Every logout path (the header button, or re-authenticating from the
+    // session-expired dialog) should leave a clean slate -- otherwise the
+    // next login would immediately re-trigger that dialog on stale state.
+    useSessionStore.getState().clear();
   },
   hydrate: () => {
     const token = getToken();

@@ -1,3 +1,5 @@
+import { useSessionStore } from "@/lib/store/useSessionStore";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
 const TOKEN_KEY = "monitor_token";
@@ -42,6 +44,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const body = await res.json().catch(() => ({}));
 
   if (!res.ok) {
+    // A 401 on a request that carried a token means the session itself is
+    // invalid/expired server-side -- distinct from the public login/reset
+    // endpoints, which never attach a token and return their own 401s
+    // (bad credentials) that callers already handle inline. Every other
+    // authenticated call silently failing here is exactly what made an
+    // expired session look like "the app just stopped loading data."
+    if (res.status === 401 && token) {
+      useSessionStore.getState().markExpired();
+    }
     throw new ApiError(res.status, body?.error ?? res.statusText);
   }
   return body.data as T;

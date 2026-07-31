@@ -169,7 +169,13 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserID(r.Context())
 	if err := h.auth.ChangePassword(r.Context(), userID, body.CurrentPassword, body.NewPassword); err != nil {
 		if err == domain.ErrUnauthorized {
-			httpresp.Error(w, http.StatusUnauthorized, "current password is incorrect")
+			// 400, not 401: this request's own bearer token is fine (the
+			// Auth middleware already accepted it) -- it's the *current
+			// password field* that's wrong. The frontend treats any 401 on
+			// an authenticated request as "your session expired, log back
+			// in," which would be a confusing thing to show someone who
+			// just mistyped their old password.
+			httpresp.Error(w, http.StatusBadRequest, "current password is incorrect")
 			return
 		}
 		httpresp.Error(w, http.StatusInternalServerError, err.Error())

@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { SessionExpiredDialog } from "@/components/auth/SessionExpiredDialog";
 import type { Role } from "@/types";
 
 /** Client-side route guard. The JWT lives in localStorage (not a cookie),
@@ -45,5 +46,10 @@ export function AuthGuard({
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <SessionExpiredDialog />
+    </>
+  );
 }
