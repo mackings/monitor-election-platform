@@ -24,24 +24,24 @@ export default function FieldHomePage() {
     <div className="space-y-5">
       <InstallAppBanner />
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 p-5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:to-slate-950">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 p-3.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:to-slate-950">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">My polling unit</p>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">My polling unit</p>
           <span
             className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
+              "rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize",
               STATUS_STYLE[status],
             )}
           >
             {status}
           </span>
         </div>
-        <p className="mt-1.5 font-heading text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+        <p className="mt-1 font-heading text-lg font-bold tracking-tight text-slate-900 dark:text-white">
           {pu?.pu_name ?? user?.assigned_pu_code ?? "Not assigned yet"}
         </p>
 
         {pu && (
-          <div className="mt-3 space-y-2">
+          <div className="mt-2 space-y-1.5">
             {pu.yardcode && <CopyableField label="YardCode" value={pu.yardcode} />}
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {pu.lga} · {pu.ward}
@@ -49,7 +49,7 @@ export default function FieldHomePage() {
           </div>
         )}
 
-        <div className="mt-4">
+        <div className="mt-2.5">
           <CheckInButton />
         </div>
       </div>

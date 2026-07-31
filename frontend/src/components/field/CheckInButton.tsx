@@ -60,7 +60,7 @@ export function CheckInButton() {
     <Button
       size="lg"
       className={cn(
-        "h-13 w-full gap-2 rounded-xl text-base font-semibold shadow-sm",
+        "h-10 w-full gap-2 rounded-xl text-sm font-semibold shadow-sm",
         isActive
           ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
           : "bg-indigo-600 text-white hover:bg-indigo-500",
@@ -69,7 +69,7 @@ export function CheckInButton() {
       disabled={submitting}
       onClick={handleClick}
     >
-      {isActive ? <LogOut className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
+      {isActive ? <LogOut className="h-4 w-4" /> : <MapPin className="h-4 w-4" />}
       {submitting ? "Working…" : isActive ? "Check out" : "Check in at my PU"}
     </Button>
   );

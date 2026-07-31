@@ -22,7 +22,7 @@ export function CopyableField({ label, value }: { label: string; value: string }
     <button
       type="button"
       onClick={handleCopy}
-      className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white/60 px-3 py-2 text-left transition-colors hover:border-indigo-200 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
+      className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white/60 px-2.5 py-1.5 text-left transition-colors hover:border-indigo-200 hover:bg-indigo-50/50 dark:border-slate-700 dark:bg-slate-900/40 dark:hover:border-indigo-500/30 dark:hover:bg-indigo-500/10"
     >
       <span className="min-w-0">
         <span className="block text-[10px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
