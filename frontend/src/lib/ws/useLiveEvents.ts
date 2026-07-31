@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { liveSocket } from "./socket";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useIncidentStore } from "@/lib/store/useIncidentStore";
+import { useCollationStore } from "@/lib/store/useCollationStore";
 import { buildFeedItem } from "@/lib/activity/feedItem";
 import type {
   DistressPayload,
@@ -23,6 +24,7 @@ export function useLiveEvents() {
   const updateOfficerLocation = useMapStore((s) => s.updateOfficerLocation);
   const addIncident = useIncidentStore((s) => s.addIncident);
   const pushFeedItem = useIncidentStore((s) => s.pushFeedItem);
+  const bumpResultsVersion = useCollationStore((s) => s.bumpResultsVersion);
 
   useEffect(() => {
     liveSocket.connect();
@@ -55,6 +57,13 @@ export function useLiveEvents() {
           if (p.pu_code) updatePUStatus(p.pu_code, "distress");
           break;
         }
+        case "result.submitted": {
+          // No store field to patch here (the collation view aggregates
+          // server-side) -- just tells the Collation page a new
+          // submission exists somewhere so it refetches its current view.
+          bumpResultsVersion();
+          break;
+        }
       }
       // Read the latest snapshot directly rather than subscribing to it —
       // this handler just needs a point-in-time lookup, and subscribing
@@ -72,5 +81,5 @@ export function useLiveEvents() {
       unsubscribe();
       liveSocket.disconnect();
     };
-  }, [updatePUStatus, updateOfficerStatus, updateOfficerLocation, addIncident, pushFeedItem]);
+  }, [updatePUStatus, updateOfficerStatus, updateOfficerLocation, addIncident, pushFeedItem, bumpResultsVersion]);
 }

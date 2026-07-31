@@ -9,11 +9,15 @@ export function hasSmsCollationNumber(): boolean {
 }
 
 export function buildResultSmsBody(params: {
-  puCode: string;
+  /** The polling unit's human-readable name -- not its code. Whoever logs
+   * this back in on the admin side is a person reading a text message,
+   * not a parser; a name is what they can actually recognize and look up
+   * an agent by, a bare code is not. */
+  puName: string;
   accreditedVoters: string;
   voteCounts: { candidate: string; votes: string }[];
 }): string {
-  const parts = [`PU:${params.puCode}`, `ACC:${params.accreditedVoters || "0"}`];
+  const parts = [`PU:${params.puName}`, `ACC:${params.accreditedVoters || "0"}`];
   params.voteCounts
     .filter((r) => r.candidate.trim())
     .forEach((r) => parts.push(`${r.candidate.trim()}:${r.votes || "0"}`));

@@ -9,6 +9,7 @@ import { submitResult } from "@/lib/api/collation";
 import { queueResult } from "@/lib/offline/queue";
 import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { buildResultSmsBody, buildResultSmsLink, hasSmsCollationNumber } from "@/lib/sms/composeSmsResult";
 import { toast } from "sonner";
 import { FileText, Plus, Trash2, MessageSquareText } from "lucide-react";
@@ -21,6 +22,8 @@ interface Row {
 
 export default function ResultEntryPage() {
   const puCode = useAuthStore((s) => s.user?.assigned_pu_code ?? "");
+  const assignedPU = useAssignedPU();
+  const puName = assignedPU?.pu_name || puCode;
   const [rows, setRows] = useState<Row[]>([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
   const [accredited, setAccredited] = useState("");
   const [mediaIds, setMediaIds] = useState<string[]>([]);
@@ -48,7 +51,7 @@ export default function ResultEntryPage() {
       toast.error("SMS submission isn't set up for this deployment yet.");
       return;
     }
-    const body = buildResultSmsBody({ puCode, accreditedVoters: accredited, voteCounts: rows });
+    const body = buildResultSmsBody({ puName, accreditedVoters: accredited, voteCounts: rows });
     window.location.href = buildResultSmsLink(body);
   }
 
