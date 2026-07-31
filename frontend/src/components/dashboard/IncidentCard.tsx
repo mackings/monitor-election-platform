@@ -6,7 +6,7 @@ import type { Incident, Media, PollingUnit, Severity, User } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 import { AlertTriangle, MapPin } from "lucide-react";
 
-const SEVERITY_STYLE: Record<Severity, string> = {
+export const SEVERITY_STYLE: Record<Severity, string> = {
   low: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
   medium: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   high: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
