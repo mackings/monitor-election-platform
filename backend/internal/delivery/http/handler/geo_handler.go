@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"monitor/backend/pkg/geo"
 	"monitor/backend/pkg/geocode"
 	"monitor/backend/pkg/httpresp"
 	"monitor/backend/pkg/ipgeo"
@@ -62,14 +61,19 @@ func (h *GeoHandler) IPLocation(w http.ResponseWriter, r *http.Request) {
 		httpresp.Error(w, http.StatusBadGateway, "couldn't determine an approximate location for your network")
 		return
 	}
-	if !geo.OyoStateBBox.Contains(result.Lat, result.Lng) {
-		// IP geolocation in Nigeria is often only accurate to "which city
-		// the ISP's block is administratively registered in" -- a result
-		// outside the state entirely is worse than useless for "near me"
-		// (it'd pan the map to an empty area with no polling units and
-		// still claim to show the "nearest" ones), so treat it the same
-		// as not having a location at all.
-		httpresp.Error(w, http.StatusBadGateway, "couldn't determine an approximate location within Oyo State for your network")
+	if !strings.EqualFold(result.Country, "Nigeria") {
+		// Country is the only granularity IP geolocation is reliable at
+		// here -- Nigerian ISPs commonly route/register a subscriber's IP
+		// block through a hub city (Lagos, Abuja) regardless of where
+		// they actually are, so a strict "must resolve inside Oyo State"
+		// check rejects real Oyo-based admins as often as it catches
+		// anything useful. Country-level is still a meaningful sanity
+		// check (catches e.g. a VPN exiting through another country
+		// entirely); state-level precision isn't something this data
+		// source can promise, so the frontend is responsible for treating
+		// the result as approximate and not overselling it as "near you"
+		// when it's actually far from any polling unit.
+		httpresp.Error(w, http.StatusBadGateway, "couldn't determine an approximate location for your network")
 		return
 	}
 	httpresp.JSON(w, http.StatusOK, map[string]any{"lat": result.Lat, "lng": result.Lng, "city": result.City})

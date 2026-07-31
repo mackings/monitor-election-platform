@@ -26,6 +26,11 @@ import { toast } from "sonner";
 import type { PollingUnit, PUStatus } from "@/types";
 
 const PAGE_SIZE = 50;
+// See dashboard/page.tsx for why this exists: IP-based location is only
+// ever city-level accurate, so check it's actually near a real polling
+// unit before trusting it rather than sorting the whole table by distance
+// from a point that could be a hundred-plus km off.
+const MAX_NEAR_ME_KM = 60;
 
 const STATUS_OPTIONS: PUStatus[] = ["not_open", "voting", "incident", "distress", "completed", "no_report"];
 
@@ -175,11 +180,20 @@ export default function PollingUnitsPage() {
   async function handleLocateMe() {
     try {
       const { lat, lng, approximate } = await locate({ timeoutMs: 15000 });
-      setUserLocation({ lat, lng });
-      setPage(1);
       if (approximate) {
+        const nearestKm = pollingUnits.length
+          ? Math.min(...pollingUnits.map((pu) => haversineKm(lat, lng, pu.lat, pu.lng)))
+          : Infinity;
+        if (nearestKm > MAX_NEAR_ME_KM) {
+          toast.error(
+            "Your network's approximate location doesn't appear to be near Oyo State — try again on a different network, or enable precise device location.",
+          );
+          return;
+        }
         toast.info("Couldn't get your device's exact location — using your network's approximate location instead.");
       }
+      setUserLocation({ lat, lng });
+      setPage(1);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
     }

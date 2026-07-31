@@ -14,9 +14,10 @@ import (
 )
 
 type Result struct {
-	Lat  float64
-	Lng  float64
-	City string
+	Lat     float64
+	Lng     float64
+	City    string
+	Country string
 }
 
 type Client struct{}
@@ -33,7 +34,7 @@ func (c *Client) Lookup(ctx context.Context, ip string) (*Result, error) {
 		return nil, fmt.Errorf("ipgeo: no client IP to look up")
 	}
 
-	url := fmt.Sprintf("http://ip-api.com/json/%s?fields=status,message,lat,lon,city", ip)
+	url := fmt.Sprintf("http://ip-api.com/json/%s?fields=status,message,lat,lon,city,country", ip)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -54,6 +55,7 @@ func (c *Client) Lookup(ctx context.Context, ip string) (*Result, error) {
 		Lat     float64 `json:"lat"`
 		Lon     float64 `json:"lon"`
 		City    string  `json:"city"`
+		Country string  `json:"country"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, err
@@ -61,5 +63,5 @@ func (c *Client) Lookup(ctx context.Context, ip string) (*Result, error) {
 	if out.Status != "success" {
 		return nil, fmt.Errorf("ipgeo: lookup failed: %s", out.Message)
 	}
-	return &Result{Lat: out.Lat, Lng: out.Lon, City: out.City}, nil
+	return &Result{Lat: out.Lat, Lng: out.Lon, City: out.City, Country: out.Country}, nil
 }

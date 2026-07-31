@@ -19,6 +19,13 @@ import type { FocusTarget } from "@/components/map/OyoMap";
 
 const MAX_SEARCH_RESULTS = 8;
 const NEAR_ME_COUNT = 20;
+// IP-based location is only ever city-level accurate, and Nigerian ISPs
+// often register a subscriber's IP block through a hub city regardless of
+// where they actually are -- rather than trust it blindly, check it's
+// actually within range of some real polling unit before treating it as
+// "your location." Generous enough to cover anywhere in/near Oyo State,
+// tight enough to catch "resolved to Lagos" (~130km from central Oyo).
+const MAX_NEAR_ME_KM = 60;
 
 function matchesQuery(pu: PollingUnit, query: string): boolean {
   return (
@@ -91,11 +98,20 @@ export default function DashboardOverviewPage() {
   async function handleLocateMe() {
     try {
       const { lat, lng, approximate } = await locate({ timeoutMs: 15000 });
-      setUserLocation({ lat, lng });
-      setFocusTarget({ lat, lng });
       if (approximate) {
+        const nearestKm = pollingUnits.length
+          ? Math.min(...pollingUnits.map((pu) => haversineKm(lat, lng, pu.lat, pu.lng)))
+          : Infinity;
+        if (nearestKm > MAX_NEAR_ME_KM) {
+          toast.error(
+            "Your network's approximate location doesn't appear to be near Oyo State — try again on a different network, or enable precise device location.",
+          );
+          return;
+        }
         toast.info("Couldn't get your device's exact location — using your network's approximate location instead.");
       }
+      setUserLocation({ lat, lng });
+      setFocusTarget({ lat, lng });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't get your location.");
     }
