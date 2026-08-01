@@ -29,6 +29,7 @@ interface TallyData {
 
 export default function CollationPage() {
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
+  const officersMap = useMapStore((s) => s.officers);
   const resultsVersion = useCollationStore((s) => s.resultsVersion);
 
   // Keyed by version rather than reset synchronously in the effect body --
@@ -37,6 +38,7 @@ export default function CollationPage() {
   const [selected, setSelected] = useState<PollingUnit | undefined>();
   const [lga, setLga] = useState("all");
   const [ward, setWard] = useState("all");
+  const [agentId, setAgentId] = useState("all");
 
   useEffect(() => {
     useNotificationStore.getState().markSeen("collation");
@@ -64,10 +66,24 @@ export default function CollationPage() {
   const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
   const lgaOptions = useMemo(() => distinctLGAs(allPUs), [allPUs]);
   const wardOptions = useMemo(() => distinctWards(allPUs, lga === "all" ? undefined : lga), [allPUs, lga]);
+  const agentOptions = useMemo(
+    () =>
+      Object.values(officersMap)
+        .filter((o) => o.assigned_pu_code)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [officersMap],
+  );
 
   const recording: PUVoteItem[] = useMemo(
     () =>
       puRows
+        .filter((r) => {
+          const pu = pollingUnitsMap[r.key];
+          if (lga !== "all" && pu?.lga !== lga) return false;
+          if (ward !== "all" && pu?.ward !== ward) return false;
+          if (agentId !== "all" && pu?.assigned_officer_id !== agentId) return false;
+          return true;
+        })
         .map((r) => {
           const pu = pollingUnitsMap[r.key];
           return {
@@ -79,9 +95,8 @@ export default function CollationPage() {
           };
         })
         .filter((p) => p.votes > 0)
-        .filter((p) => (lga === "all" || p.lga === lga) && (ward === "all" || p.ward === ward))
         .sort((a, b) => b.votes - a.votes),
-    [puRows, pollingUnitsMap, lga, ward],
+    [puRows, pollingUnitsMap, lga, ward, agentId],
   );
 
   const notRecordingCount = useMemo(
@@ -182,12 +197,29 @@ export default function CollationPage() {
               </SelectContent>
             </Select>
 
-            {(lga !== "all" || ward !== "all") && (
+            <Select value={agentId} onValueChange={(v) => setAgentId(v ?? "all")}>
+              <SelectTrigger className="w-44 rounded-xl">
+                <SelectValue placeholder="All agents">
+                  {(v: string) => (v === "all" ? "All agents" : (agentOptions.find((o) => o.id === v)?.name ?? v))}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All agents</SelectItem>
+                {agentOptions.map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(lga !== "all" || ward !== "all" || agentId !== "all") && (
               <button
                 type="button"
                 onClick={() => {
                   setLga("all");
                   setWard("all");
+                  setAgentId("all");
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground hover:underline"
               >

@@ -22,6 +22,7 @@ export default function NotRecordingPage() {
   const [query, setQuery] = useState("");
   const [lga, setLga] = useState("all");
   const [ward, setWard] = useState("all");
+  const [agentId, setAgentId] = useState("all");
   const [selected, setSelected] = useState<PollingUnit | undefined>();
 
   useEffect(() => {
@@ -52,12 +53,21 @@ export default function NotRecordingPage() {
   const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
   const lgaOptions = useMemo(() => distinctLGAs(allPUs), [allPUs]);
   const wardOptions = useMemo(() => distinctWards(allPUs, lga === "all" ? undefined : lga), [allPUs, lga]);
+  const agentOptions = useMemo(
+    () =>
+      Object.values(officersMap)
+        .filter((o) => o.assigned_pu_code)
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [officersMap],
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return notRecording.filter((pu) => {
       if (lga !== "all" && pu.lga !== lga) return false;
       if (ward !== "all" && pu.ward !== ward) return false;
+      if (agentId === "unassigned" && pu.assigned_officer_id) return false;
+      if (agentId !== "all" && agentId !== "unassigned" && pu.assigned_officer_id !== agentId) return false;
       if (!q) return true;
       return (
         pu.pu_name.toLowerCase().includes(q) ||
@@ -65,7 +75,7 @@ export default function NotRecordingPage() {
         pu.ward.toLowerCase().includes(q)
       );
     });
-  }, [notRecording, query, lga, ward]);
+  }, [notRecording, query, lga, ward, agentId]);
 
   return (
     <div className="flex h-full flex-col space-y-4 p-6">
@@ -126,13 +136,33 @@ export default function NotRecordingPage() {
           </SelectContent>
         </Select>
 
-        {(query || lga !== "all" || ward !== "all") && (
+        <Select value={agentId} onValueChange={(v) => setAgentId(v ?? "all")}>
+          <SelectTrigger className="w-44 rounded-xl">
+            <SelectValue placeholder="All agents">
+              {(v: string) =>
+                v === "all" ? "All agents" : v === "unassigned" ? "Unassigned" : (agentOptions.find((o) => o.id === v)?.name ?? v)
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All agents</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
+            {agentOptions.map((o) => (
+              <SelectItem key={o.id} value={o.id}>
+                {o.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(query || lga !== "all" || ward !== "all" || agentId !== "all") && (
           <button
             type="button"
             onClick={() => {
               setQuery("");
               setLga("all");
               setWard("all");
+              setAgentId("all");
             }}
             className="text-xs text-muted-foreground hover:text-foreground hover:underline"
           >
