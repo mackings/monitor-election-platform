@@ -6,7 +6,9 @@ import { getTally } from "@/lib/api/collation";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useCollationStore } from "@/lib/store/useCollationStore";
 import { useNotificationStore } from "@/lib/store/useNotificationStore";
+import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatTile } from "@/components/dashboard/StatTile";
 import { LogSmsResultDialog } from "@/components/dashboard/LogSmsResultDialog";
 import { PUVotesList, type PUVoteItem } from "@/components/dashboard/charts/PUVotesList";
@@ -33,6 +35,8 @@ export default function CollationPage() {
   // stale data is treated as "still loading" until the fetch resolves.
   const [data, setData] = useState<TallyData | null>(null);
   const [selected, setSelected] = useState<PollingUnit | undefined>();
+  const [lga, setLga] = useState("all");
+  const [ward, setWard] = useState("all");
 
   useEffect(() => {
     useNotificationStore.getState().markSeen("collation");
@@ -57,6 +61,10 @@ export default function CollationPage() {
   const totalVotes = stateRow?.vote_counts?.[TRACKED_PARTY] ?? 0;
   const reportingCodes = useMemo(() => new Set(puRows.map((r) => r.key)), [puRows]);
 
+  const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
+  const lgaOptions = useMemo(() => distinctLGAs(allPUs), [allPUs]);
+  const wardOptions = useMemo(() => distinctWards(allPUs, lga === "all" ? undefined : lga), [allPUs, lga]);
+
   const recording: PUVoteItem[] = useMemo(
     () =>
       puRows
@@ -71,8 +79,9 @@ export default function CollationPage() {
           };
         })
         .filter((p) => p.votes > 0)
+        .filter((p) => (lga === "all" || p.lga === lga) && (ward === "all" || p.ward === ward))
         .sort((a, b) => b.votes - a.votes),
-    [puRows, pollingUnitsMap],
+    [puRows, pollingUnitsMap, lga, ward],
   );
 
   const notRecordingCount = useMemo(
@@ -137,6 +146,56 @@ export default function CollationPage() {
               <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
+
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Select
+              value={lga}
+              onValueChange={(v) => {
+                setLga(v ?? "all");
+                setWard("all");
+              }}
+            >
+              <SelectTrigger className="w-44 rounded-xl">
+                <SelectValue placeholder="All LGAs">{(v: string) => (v === "all" ? "All LGAs" : v)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All LGAs</SelectItem>
+                {lgaOptions.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {l}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={ward} onValueChange={(v) => setWard(v ?? "all")}>
+              <SelectTrigger className="w-44 rounded-xl">
+                <SelectValue placeholder="All wards">{(v: string) => (v === "all" ? "All wards" : v)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All wards</SelectItem>
+                {wardOptions.map((w) => (
+                  <SelectItem key={w} value={w}>
+                    {w}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(lga !== "all" || ward !== "all") && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLga("all");
+                  setWard("all");
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+
           <PUVotesList
             items={recording}
             emptyLabel="No polling units have recorded votes yet."
