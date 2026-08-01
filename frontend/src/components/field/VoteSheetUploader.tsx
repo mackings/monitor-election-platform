@@ -24,10 +24,14 @@ interface Item {
  * the exact image wasn't altered after capture. */
 export function VoteSheetUploader({
   puCode,
+  puName,
   onChange,
   onUploadingChange,
 }: {
   puCode: string;
+  /** Human-readable PU name, watermarked onto the photo instead of the
+   * bare code when known -- falls back to the code if not loaded yet. */
+  puName?: string;
   onChange: (mediaIds: string[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
 }) {
@@ -73,7 +77,7 @@ export function VoteSheetUploader({
         let stamped: File | undefined;
         let proof: { sha256: string; captured_at: string; captured_lat?: number; captured_lng?: number } | undefined;
         try {
-          const watermarked = await watermarkAndHash(file, { puCode, lat: location?.lat, lng: location?.lng });
+          const watermarked = await watermarkAndHash(file, { puCode, puName, lat: location?.lat, lng: location?.lng });
           stamped = watermarked.file;
           proof = {
             sha256: watermarked.sha256,

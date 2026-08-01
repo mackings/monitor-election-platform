@@ -264,7 +264,7 @@ export default function PollingUnitsPage() {
           }}
         >
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All LGAs" />
+            <SelectValue placeholder="All LGAs">{(v: string) => (v === "all" ? "All LGAs" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All LGAs</SelectItem>
@@ -278,7 +278,7 @@ export default function PollingUnitsPage() {
 
         <Select value={ward} onValueChange={(v) => updateAndResetPage(setWard)(v ?? "all")}>
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All wards" />
+            <SelectValue placeholder="All wards">{(v: string) => (v === "all" ? "All wards" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All wards</SelectItem>
@@ -317,7 +317,11 @@ export default function PollingUnitsPage() {
           onValueChange={(v) => updateAndResetPage(setAssignment)((v as typeof assignment) ?? "all")}
         >
           <SelectTrigger className="w-36 rounded-xl">
-            <SelectValue placeholder="Assignment" />
+            <SelectValue placeholder="Assignment">
+              {(v: string) =>
+                ({ all: "Any agent", assigned: "Assigned", unassigned: "Unassigned" })[v] ?? v
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Any agent</SelectItem>
@@ -330,7 +334,7 @@ export default function PollingUnitsPage() {
           <Select value={sort} onValueChange={(v) => setSort((v as SortOption) ?? "name")}>
             <SelectTrigger className="w-44 rounded-xl">
               <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
-              <SelectValue />
+              <SelectValue>{(v: string) => SORT_OPTIONS.find((o) => o.value === v)?.label ?? v}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {SORT_OPTIONS.map((o) => (

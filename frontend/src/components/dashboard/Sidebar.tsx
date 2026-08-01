@@ -1,10 +1,14 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuthStore } from "@/lib/store/useAuthStore";
+import { useIncidentStore } from "@/lib/store/useIncidentStore";
+import { useCollationStore } from "@/lib/store/useCollationStore";
+import { useNotificationStore, type NotificationSection } from "@/lib/store/useNotificationStore";
 import {
   LayoutDashboard,
   Users,
@@ -17,18 +21,18 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: { href: string; label: string; icon: typeof LayoutDashboard; notify?: NotificationSection }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/agents", label: "Agents", icon: Users },
   { href: "/polling-units", label: "Polling Units", icon: Vote },
-  { href: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { href: "/activity", label: "Live Activity", icon: Activity },
-  { href: "/collation", label: "Collation", icon: BarChart3 },
+  { href: "/incidents", label: "Incidents", icon: AlertTriangle, notify: "incidents" },
+  { href: "/activity", label: "Live Activity", icon: Activity, notify: "activity" },
+  { href: "/collation", label: "Collation", icon: BarChart3, notify: "collation" },
 ];
 
 // Only real admins can invite other admins — supervisors see the rest of
 // the dashboard but not this menu.
-const ADMIN_ONLY_NAV_ITEM = { href: "/admins", label: "Admins", icon: ShieldCheck };
+const ADMIN_ONLY_NAV_ITEM: (typeof NAV_ITEMS)[number] = { href: "/admins", label: "Admins", icon: ShieldCheck };
 
 function initials(name?: string) {
   if (!name) return "?";
@@ -40,6 +44,25 @@ export function Sidebar() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const navItems = user?.role === "admin" ? [...NAV_ITEMS, ADMIN_ONLY_NAV_ITEM] : NAV_ITEMS;
+
+  const incidents = useIncidentStore((s) => s.incidents);
+  const feed = useIncidentStore((s) => s.feed);
+  const newResultsCount = useCollationStore((s) => s.newResultsCount);
+  const lastSeen = useNotificationStore((s) => s.lastSeen);
+
+  const incidentCount = useMemo(
+    () => incidents.filter((i) => new Date(i.created_at).getTime() > lastSeen.incidents).length,
+    [incidents, lastSeen.incidents],
+  );
+  const activityCount = useMemo(
+    () => feed.filter((f) => new Date(f.at).getTime() > lastSeen.activity).length,
+    [feed, lastSeen.activity],
+  );
+  const notifyCounts: Record<NotificationSection, number> = {
+    incidents: incidentCount,
+    activity: activityCount,
+    collation: newResultsCount,
+  };
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-slate-200/70 bg-white px-3 py-4 dark:border-slate-800 dark:bg-slate-950">
@@ -54,8 +77,9 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon, notify }) => {
           const active = pathname === href;
+          const count = notify ? notifyCounts[notify] : 0;
           return (
             <Link
               key={href}
@@ -69,6 +93,16 @@ export function Sidebar() {
             >
               <Icon className="h-4 w-4" />
               {label}
+              {count > 0 && (
+                <span
+                  className={cn(
+                    "ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-bold",
+                    active ? "bg-white/25 text-white" : "bg-red-500 text-white",
+                  )}
+                >
+                  {count > 99 ? "99+" : count}
+                </span>
+              )}
             </Link>
           );
         })}

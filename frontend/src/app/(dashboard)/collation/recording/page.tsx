@@ -5,8 +5,11 @@ import Link from "next/link";
 import { getTally } from "@/lib/api/collation";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useCollationStore } from "@/lib/store/useCollationStore";
+import { useNotificationStore } from "@/lib/store/useNotificationStore";
+import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
 import { PUVotesList, type PUVoteItem } from "@/components/dashboard/charts/PUVotesList";
 import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft } from "lucide-react";
 import type { PollingUnit, TallyRow } from "@/types";
 
@@ -16,7 +19,14 @@ export default function RecordingPage() {
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
   const resultsVersion = useCollationStore((s) => s.resultsVersion);
   const [puRows, setPuRows] = useState<TallyRow[] | null>(null);
+  const [lga, setLga] = useState("all");
+  const [ward, setWard] = useState("all");
   const [selected, setSelected] = useState<PollingUnit | undefined>();
+
+  useEffect(() => {
+    useNotificationStore.getState().markSeen("collation");
+    useCollationStore.getState().clearNewResults();
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -27,6 +37,10 @@ export default function RecordingPage() {
       ignore = true;
     };
   }, [resultsVersion]);
+
+  const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
+  const lgaOptions = useMemo(() => distinctLGAs(allPUs), [allPUs]);
+  const wardOptions = useMemo(() => distinctWards(allPUs, lga === "all" ? undefined : lga), [allPUs, lga]);
 
   const recording: PUVoteItem[] = useMemo(
     () =>
@@ -42,8 +56,9 @@ export default function RecordingPage() {
           };
         })
         .filter((p) => p.votes > 0)
+        .filter((p) => (lga === "all" || p.lga === lga) && (ward === "all" || p.ward === ward))
         .sort((a, b) => b.votes - a.votes),
-    [puRows, pollingUnitsMap],
+    [puRows, pollingUnitsMap, lga, ward],
   );
 
   return (
@@ -62,6 +77,55 @@ export default function RecordingPage() {
         <p className="text-sm text-muted-foreground">Tap a polling unit for its full result breakdown.</p>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={lga}
+          onValueChange={(v) => {
+            setLga(v ?? "all");
+            setWard("all");
+          }}
+        >
+          <SelectTrigger className="w-44 rounded-xl">
+            <SelectValue placeholder="All LGAs">{(v: string) => (v === "all" ? "All LGAs" : v)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All LGAs</SelectItem>
+            {lgaOptions.map((l) => (
+              <SelectItem key={l} value={l}>
+                {l}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={ward} onValueChange={(v) => setWard(v ?? "all")}>
+          <SelectTrigger className="w-44 rounded-xl">
+            <SelectValue placeholder="All wards">{(v: string) => (v === "all" ? "All wards" : v)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All wards</SelectItem>
+            {wardOptions.map((w) => (
+              <SelectItem key={w} value={w}>
+                {w}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(lga !== "all" || ward !== "all") && (
+          <button
+            type="button"
+            onClick={() => {
+              setLga("all");
+              setWard("all");
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
       <div className="min-h-0 flex-1">
         {puRows === null ? (
           <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>
@@ -69,7 +133,7 @@ export default function RecordingPage() {
           <PUVotesList
             items={recording}
             emptyLabel="No polling units have recorded votes yet."
-            maxHeightClass="h-[calc(100vh-14rem)]"
+            maxHeightClass="h-[calc(100vh-17rem)]"
             onSelect={(code) => setSelected(pollingUnitsMap[code])}
           />
         )}

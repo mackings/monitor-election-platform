@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ThousandsInput } from "@/components/shared/ThousandsInput";
 import { VoteSheetUploader } from "@/components/field/VoteSheetUploader";
 import { submitResult } from "@/lib/api/collation";
 import { queueResult, PENDING_MEDIA_PREFIX } from "@/lib/offline/queue";
@@ -11,6 +12,7 @@ import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { buildResultSmsBody, buildResultSmsLink, hasSmsCollationNumber } from "@/lib/sms/composeSmsResult";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { FileText, Plus, Trash2, MessageSquareText } from "lucide-react";
 
@@ -40,6 +42,10 @@ export default function ResultEntryPage() {
   function removeRow(id: string) {
     setRows((r) => r.filter((row) => row.id !== id));
   }
+
+  const totalVotesEntered = useMemo(() => rows.reduce((sum, r) => sum + (Number(r.votes) || 0), 0), [rows]);
+  const accreditedNum = Number(accredited) || 0;
+  const votesExceedAccredited = accreditedNum > 0 && totalVotesEntered > accreditedNum;
 
   function handleSubmitViaSms() {
     if (!puCode) {
@@ -138,43 +144,46 @@ export default function ResultEntryPage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label>Result sheet photo</Label>
-          <VoteSheetUploader puCode={puCode} onChange={setMediaIds} onUploadingChange={setUploading} />
+          <VoteSheetUploader puCode={puCode} puName={assignedPU?.pu_name} onChange={setMediaIds} onUploadingChange={setUploading} />
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="accredited">Total accredited voters</Label>
-          <Input
+          <Label htmlFor="accredited">How many voters were accredited?</Label>
+          <ThousandsInput
             id="accredited"
-            type="number"
-            inputMode="numeric"
+            className="h-11 text-base font-semibold tabular-nums"
+            placeholder="e.g. 1,000"
             value={accredited}
-            onChange={(e) => setAccredited(e.target.value)}
+            onChange={setAccredited}
             required
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Votes per candidate/party</Label>
+          <Label>How many votes did each party get?</Label>
+          <p className="text-xs text-muted-foreground">
+            One row per party — the party&apos;s short name (e.g. APM) and how many votes they got.
+          </p>
           <div className="space-y-2">
             {rows.map((row) => (
               <div key={row.id} className="flex gap-2">
                 <Input
-                  placeholder="Party / candidate"
+                  placeholder="e.g. APM"
+                  className="h-11 text-base"
                   value={row.candidate}
                   onChange={(e) => updateRow(row.id, { candidate: e.target.value })}
                 />
-                <Input
-                  placeholder="Votes"
-                  type="number"
-                  inputMode="numeric"
-                  className="w-24"
+                <ThousandsInput
+                  placeholder="e.g. 1,200"
+                  className="h-11 w-28 text-base font-semibold tabular-nums"
                   value={row.votes}
-                  onChange={(e) => updateRow(row.id, { votes: e.target.value })}
+                  onChange={(votes) => updateRow(row.id, { votes })}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
+                  className="h-11 w-11 shrink-0"
                   onClick={() => removeRow(row.id)}
                   disabled={rows.length === 1}
                 >
@@ -185,8 +194,22 @@ export default function ResultEntryPage() {
           </div>
           <Button type="button" variant="outline" size="sm" className="mt-2 gap-1 rounded-lg" onClick={addRow}>
             <Plus className="h-4 w-4" />
-            Add candidate
+            Add another party
           </Button>
+
+          {totalVotesEntered > 0 && (
+            <p
+              className={cn(
+                "rounded-lg px-3 py-2 text-sm font-medium",
+                votesExceedAccredited
+                  ? "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400"
+                  : "bg-slate-50 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300",
+              )}
+            >
+              Total votes entered: {totalVotesEntered.toLocaleString()}
+              {votesExceedAccredited && " — this is more than the accredited voters above. Double-check the figures."}
+            </p>
+          )}
         </div>
 
         <Button

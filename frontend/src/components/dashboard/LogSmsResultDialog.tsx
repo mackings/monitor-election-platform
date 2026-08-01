@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ThousandsInput } from "@/components/shared/ThousandsInput";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMapStore } from "@/lib/store/useMapStore";
@@ -134,12 +135,12 @@ export function LogSmsResultDialog({ onLogged }: { onLogged?: () => void }) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="sms-accredited">Total accredited voters</Label>
-              <Input
+              <ThousandsInput
                 id="sms-accredited"
-                type="number"
-                inputMode="numeric"
+                className="h-10 text-base font-semibold tabular-nums"
+                placeholder="e.g. 1,000"
                 value={accredited}
-                onChange={(e) => setAccredited(e.target.value)}
+                onChange={setAccredited}
                 required
               />
             </div>
@@ -149,17 +150,15 @@ export function LogSmsResultDialog({ onLogged }: { onLogged?: () => void }) {
                 {rows.map((row) => (
                   <div key={row.id} className="flex gap-2">
                     <Input
-                      placeholder="Party / candidate"
+                      placeholder="e.g. APM"
                       value={row.candidate}
                       onChange={(e) => updateRow(row.id, { candidate: e.target.value })}
                     />
-                    <Input
-                      placeholder="Votes"
-                      type="number"
-                      inputMode="numeric"
-                      className="w-24"
+                    <ThousandsInput
+                      placeholder="e.g. 1,200"
+                      className="h-10 w-28 text-base font-semibold tabular-nums"
                       value={row.votes}
-                      onChange={(e) => updateRow(row.id, { votes: e.target.value })}
+                      onChange={(votes) => updateRow(row.id, { votes })}
                     />
                     <Button
                       type="button"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getTally } from "@/lib/api/collation";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { useCollationStore } from "@/lib/store/useCollationStore";
+import { useNotificationStore } from "@/lib/store/useNotificationStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatTile } from "@/components/dashboard/StatTile";
 import { LogSmsResultDialog } from "@/components/dashboard/LogSmsResultDialog";
@@ -32,6 +33,11 @@ export default function CollationPage() {
   // stale data is treated as "still loading" until the fetch resolves.
   const [data, setData] = useState<TallyData | null>(null);
   const [selected, setSelected] = useState<PollingUnit | undefined>();
+
+  useEffect(() => {
+    useNotificationStore.getState().markSeen("collation");
+    useCollationStore.getState().clearNewResults();
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -79,7 +85,10 @@ export default function CollationPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="font-heading text-2xl font-bold tracking-tight">Collation — {TRACKED_PARTY}</h1>
+            <h1 className="font-heading text-2xl font-bold tracking-tight">Collation</h1>
+            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
+              {TRACKED_PARTY}
+            </span>
             <span
               className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
               title="Updates automatically as new results come in"
@@ -118,11 +127,11 @@ export default function CollationPage() {
 
       <Card className="rounded-2xl border-slate-200/70 dark:border-slate-800">
         <CardContent className="py-4">
-          <div className="mb-3 flex items-center gap-3">
+          <div className="mb-3 flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Polling units recording {TRACKED_PARTY} votes</p>
             <Link
               href="/collation/recording"
-              className="flex items-center text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+              className="flex shrink-0 items-center text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
             >
               View all
               <ChevronRight className="h-3.5 w-3.5" />

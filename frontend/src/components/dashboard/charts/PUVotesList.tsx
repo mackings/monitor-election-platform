@@ -69,45 +69,52 @@ export function PUVotesList({
       {filtered.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">{emptyLabel}</p>
       ) : (
-        <div className={cn(maxHeightClass, "space-y-1 overflow-y-auto pr-1")}>
+        <div
+          className={cn(
+            maxHeightClass,
+            "grid auto-rows-min grid-cols-1 content-start items-start gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3",
+          )}
+        >
           {filtered.map((item, i) => (
             <div
               key={item.code}
               onClick={onSelect ? () => onSelect(item.code) : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-900",
-                onSelect && "cursor-pointer",
+                "flex flex-col gap-2.5 rounded-xl border border-slate-200/70 bg-white p-3 shadow-sm transition-all dark:border-slate-800 dark:bg-slate-900",
+                onSelect && "cursor-pointer hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md dark:hover:border-indigo-500/40",
               )}
             >
-              <span
-                className={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums",
-                  item.votes == null
-                    ? "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-                    : i < 3
-                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
-                      : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
-                )}
-              >
-                {item.votes != null ? i + 1 : "–"}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{item.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {item.ward}
-                  {item.ward && item.lga ? ", " : ""}
-                  {item.lga}
-                </p>
+              <div className="flex items-start gap-2.5">
+                <span
+                  className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold tabular-nums",
+                    item.votes == null
+                      ? "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
+                      : i < 3
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                        : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
+                  )}
+                >
+                  {item.votes != null ? i + 1 : "–"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{item.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {item.ward}
+                    {item.ward && item.lga ? ", " : ""}
+                    {item.lga}
+                  </p>
+                </div>
               </div>
               {item.votes != null && (
-                <div className="flex w-32 shrink-0 items-center gap-2">
+                <div className="flex items-center gap-2">
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${max > 0 ? (item.votes / max) * 100 : 0}%`, backgroundColor: color }}
                     />
                   </div>
-                  <span className="w-12 shrink-0 text-right text-sm font-semibold tabular-nums">
+                  <span className="shrink-0 text-right text-sm font-semibold tabular-nums">
                     {item.votes.toLocaleString()}
                   </span>
                 </div>

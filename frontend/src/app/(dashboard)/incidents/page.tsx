@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useIncidentStore } from "@/lib/store/useIncidentStore";
 import { useMapStore } from "@/lib/store/useMapStore";
+import { useNotificationStore } from "@/lib/store/useNotificationStore";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { distinctLGAs } from "@/lib/pollingUnits/filterOptions";
 import { IncidentGroupCard } from "@/components/dashboard/IncidentGroupCard";
@@ -35,6 +36,10 @@ export default function IncidentsPage() {
   const debouncedQuery = useDebouncedValue(query, 200);
   const [severities, setSeverities] = useState<Set<Severity>>(new Set());
   const [lga, setLga] = useState("all");
+
+  useEffect(() => {
+    useNotificationStore.getState().markSeen("incidents");
+  }, []);
 
   const lgaOptions = useMemo(() => distinctLGAs(Object.values(pollingUnits)), [pollingUnits]);
 
@@ -123,7 +128,7 @@ export default function IncidentsPage() {
 
         <Select value={lga} onValueChange={(v) => setLga(v ?? "all")}>
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All LGAs" />
+            <SelectValue placeholder="All LGAs">{(v: string) => (v === "all" ? "All LGAs" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All LGAs</SelectItem>

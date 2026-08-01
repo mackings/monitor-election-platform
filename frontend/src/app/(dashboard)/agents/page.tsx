@@ -87,7 +87,7 @@ export default function AgentsPage() {
           }}
         >
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All LGAs" />
+            <SelectValue placeholder="All LGAs">{(v: string) => (v === "all" ? "All LGAs" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All LGAs</SelectItem>
@@ -101,7 +101,7 @@ export default function AgentsPage() {
 
         <Select value={ward} onValueChange={(v) => setWard(v ?? "all")}>
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All wards" />
+            <SelectValue placeholder="All wards">{(v: string) => (v === "all" ? "All wards" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All wards</SelectItem>
@@ -115,7 +115,11 @@ export default function AgentsPage() {
 
         <Select value={status} onValueChange={(v) => setStatus((v as OfficerStatus | "all") ?? "all")}>
           <SelectTrigger className="w-40 rounded-xl">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder="All statuses">
+              {(v: string) =>
+                ({ all: "All statuses", active: "Active", offline: "Offline", distress: "Distress" })[v] ?? v
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>

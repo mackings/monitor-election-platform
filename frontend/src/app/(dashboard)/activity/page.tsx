@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMapStore } from "@/lib/store/useMapStore";
+import { useNotificationStore } from "@/lib/store/useNotificationStore";
 import { listActivity, type ActivityRecord } from "@/lib/api/activity";
 import { getMediaBatch } from "@/lib/api/media";
 import { buildFeedItem } from "@/lib/activity/feedItem";
@@ -63,6 +64,10 @@ export default function ActivityPage() {
   const [ward, setWard] = useState("all");
   const [officerId, setOfficerId] = useState("all");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    useNotificationStore.getState().markSeen("activity");
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -179,7 +184,9 @@ export default function ActivityPage() {
 
         <Select value={kind} onValueChange={(v) => updateAndResetPage(setKind)((v as FeedItemKind | "all") ?? "all")}>
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All types" />
+            <SelectValue placeholder="All types">
+              {(v: string) => (v === "all" ? "All types" : (KIND_LABEL[v as FeedItemKind] ?? v))}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All types</SelectItem>
@@ -199,7 +206,7 @@ export default function ActivityPage() {
           }}
         >
           <SelectTrigger className="w-40 rounded-xl">
-            <SelectValue placeholder="All LGAs" />
+            <SelectValue placeholder="All LGAs">{(v: string) => (v === "all" ? "All LGAs" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All LGAs</SelectItem>
@@ -213,7 +220,7 @@ export default function ActivityPage() {
 
         <Select value={ward} onValueChange={(v) => updateAndResetPage(setWard)(v ?? "all")}>
           <SelectTrigger className="w-40 rounded-xl">
-            <SelectValue placeholder="All wards" />
+            <SelectValue placeholder="All wards">{(v: string) => (v === "all" ? "All wards" : v)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All wards</SelectItem>
@@ -227,7 +234,9 @@ export default function ActivityPage() {
 
         <Select value={officerId} onValueChange={(v) => updateAndResetPage(setOfficerId)(v ?? "all")}>
           <SelectTrigger className="w-44 rounded-xl">
-            <SelectValue placeholder="All agents" />
+            <SelectValue placeholder="All agents">
+              {(v: string) => (v === "all" ? "All agents" : (officersList.find((o) => o.id === v)?.name ?? v))}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All agents</SelectItem>

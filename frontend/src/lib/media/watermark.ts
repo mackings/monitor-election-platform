@@ -1,5 +1,9 @@
 export interface WatermarkMeta {
   puCode: string;
+  /** Human-readable PU name -- shown instead of the bare code when known,
+   * since the point of the watermark is someone glancing at the photo
+   * recognizing where it's from, not decoding a code. */
+  puName?: string;
   lat?: number;
   lng?: number;
 }
@@ -28,7 +32,7 @@ export async function watermarkAndHash(file: File, meta: WatermarkMeta): Promise
 
   const capturedAt = new Date().toISOString();
   const lines = [
-    `PU ${meta.puCode}`,
+    meta.puName ? `${meta.puName} (${meta.puCode})` : `PU ${meta.puCode}`,
     new Date(capturedAt).toLocaleString(),
     meta.lat != null && meta.lng != null ? `${meta.lat.toFixed(5)}, ${meta.lng.toFixed(5)}` : "Location unavailable",
   ];
