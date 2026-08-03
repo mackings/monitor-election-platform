@@ -20,6 +20,24 @@ export function unassignOfficer(officerId: string) {
   return api.post("/api/v1/officers/unassign", { officer_id: officerId });
 }
 
+export interface UpdateOfficerInput {
+  name?: string;
+  phone?: string;
+  email?: string;
+}
+
+export function updateOfficer(officerId: string, patch: UpdateOfficerInput) {
+  return api.patch<{ status: string }>(`/api/v1/officers/${officerId}`, patch);
+}
+
+/** Removes the officer's account entirely -- clears their assigned PU's
+ * back-reference server-side first, so no polling unit is left pointing
+ * at an account that no longer exists. Incidents/results they already
+ * submitted keep their officer_id as historical record. */
+export function deleteOfficer(officerId: string) {
+  return api.delete<{ status: string }>(`/api/v1/officers/${officerId}`);
+}
+
 export function checkIn(lat: number, lng: number) {
   return api.post("/api/v1/officer/checkin", { lat, lng });
 }

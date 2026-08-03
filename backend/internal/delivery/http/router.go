@@ -62,6 +62,8 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 				r.Post("/officers/assign", h.Officer.Assign)
 				r.Post("/officers/assign-sub", h.Officer.AssignSubAgent)
 				r.Post("/officers/unassign", h.Officer.Unassign)
+				r.Patch("/officers/{id}", h.Officer.Update)
+				r.Delete("/officers/{id}", h.Officer.Delete)
 				r.Post("/results/manual", h.Collation.SubmitManual)
 			})
 

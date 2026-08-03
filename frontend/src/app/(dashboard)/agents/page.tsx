@@ -208,6 +208,7 @@ export default function AgentsPage() {
         officer={selected}
         assignedPU={selected?.assigned_pu_code ? pollingUnitsMap[selected.assigned_pu_code] : undefined}
         onOpenChange={(open) => !open && setSelectedId(null)}
+        onChanged={() => listOfficers().then(setOfficers)}
       />
     </div>
   );

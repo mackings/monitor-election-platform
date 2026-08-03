@@ -41,12 +41,28 @@ type User struct {
 	CreatedAt      time.Time     `bson:"created_at" json:"created_at"`
 }
 
+// UserPatch is a partial update -- a nil field is left untouched. Only the
+// admin-editable identity fields belong here (not status/assignment/
+// location, which already have their own dedicated update paths that
+// carry their own invariants).
+type UserPatch struct {
+	Name  *string
+	Phone *string
+	Email *string
+}
+
 type UserRepository interface {
 	Create(ctx context.Context, u *User) error
 	FindByUsername(ctx context.Context, username string) (*User, error)
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	FindByID(ctx context.Context, id string) (*User, error)
 	List(ctx context.Context, role Role) ([]*User, error)
+	Update(ctx context.Context, userID string, patch UserPatch) error
+	// Delete removes the user document itself. Callers are responsible for
+	// clearing any polling-unit back-reference first (see officer.Usecase.
+	// Delete) -- this repository method doesn't know about PollingUnit at
+	// all, the same separation of concerns UpdateAssignment already keeps.
+	Delete(ctx context.Context, userID string) error
 	UpdateAssignment(ctx context.Context, userID, puCode string) error
 	UpdateStatus(ctx context.Context, userID string, status OfficerStatus, loc *Location) error
 	// UpdateLocation records a live position ping without touching status —

@@ -248,3 +248,21 @@ func (u *Usecase) UnassignPU(ctx context.Context, officerID string) error {
 	}
 	return u.users.UpdateAssignment(ctx, officerID, "")
 }
+
+// Update patches an officer's editable identity fields (name/phone/email --
+// not status/assignment, which have their own dedicated flows).
+func (u *Usecase) Update(ctx context.Context, officerID string, patch domain.UserPatch) error {
+	return u.users.Update(ctx, officerID, patch)
+}
+
+// Delete removes an officer's account outright. Clears their polling-unit
+// back-reference first (same as UnassignPU) so a deleted officer never
+// leaves a PU pointing at an account that no longer exists; incidents and
+// results they already submitted keep their officer_id as historical
+// record, same as any other reference to a since-removed user.
+func (u *Usecase) Delete(ctx context.Context, officerID string) error {
+	if err := u.UnassignPU(ctx, officerID); err != nil {
+		return err
+	}
+	return u.users.Delete(ctx, officerID)
+}

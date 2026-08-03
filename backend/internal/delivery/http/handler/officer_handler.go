@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"monitor/backend/internal/delivery/http/middleware"
 	"monitor/backend/internal/domain"
 	"monitor/backend/internal/usecase/officer"
@@ -57,6 +59,42 @@ func (h *OfficerHandler) AssignSubAgent(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "assigned"})
+}
+
+func (h *OfficerHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Name  *string `json:"name"`
+		Phone *string `json:"phone"`
+		Email *string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	patch := domain.UserPatch{Name: body.Name, Phone: body.Phone, Email: body.Email}
+	if err := h.officer.Update(r.Context(), id, patch); err != nil {
+		if err == domain.ErrNotFound {
+			httpresp.Error(w, http.StatusNotFound, "officer not found")
+			return
+		}
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (h *OfficerHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := h.officer.Delete(r.Context(), id); err != nil {
+		if err == domain.ErrNotFound {
+			httpresp.Error(w, http.StatusNotFound, "officer not found")
+			return
+		}
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
 func (h *OfficerHandler) Unassign(w http.ResponseWriter, r *http.Request) {

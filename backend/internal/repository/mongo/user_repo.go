@@ -147,6 +147,49 @@ func (r *UserRepository) UpdateAssignment(ctx context.Context, userID, puCode st
 	return err
 }
 
+func (r *UserRepository) Update(ctx context.Context, userID string, patch domain.UserPatch) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	set := bson.M{}
+	if patch.Name != nil {
+		set["name"] = *patch.Name
+	}
+	if patch.Phone != nil {
+		set["phone"] = *patch.Phone
+	}
+	if patch.Email != nil {
+		set["email"] = *patch.Email
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	res, err := r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": set})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (r *UserRepository) Delete(ctx context.Context, userID string) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	res, err := r.col.DeleteOne(ctx, bson.M{"_id": oid})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func (r *UserRepository) UpdatePassword(ctx context.Context, userID, newPasswordHash string) error {
 	oid, err := bson.ObjectIDFromHex(userID)
 	if err != nil {
