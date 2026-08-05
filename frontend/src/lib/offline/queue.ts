@@ -335,12 +335,37 @@ async function resolvePendingMedia(): Promise<{
   return { resolved, errors, sessionExpired: false };
 }
 
-function replaceMediaIds(ids: string[] | undefined, resolved: Map<string, string>): string[] | undefined {
-  return ids?.map((id) => resolved.get(id) ?? id);
-}
-
-function unresolvedMediaId(ids: string[] | undefined): string | undefined {
-  return (ids ?? []).find((id) => id.startsWith(PENDING_MEDIA_PREFIX));
+/** Splits a media_ids list into what's still genuinely pending (worth
+ * continuing to wait for) vs. permanently lost (a "local:" id with no
+ * QueuedMedia record behind it anymore -- resolvePendingMedia attempts
+ * every record that exists on every single pass, so if an id isn't in
+ * `resolved` and isn't in `errors` either, the only explanation is that
+ * the record itself is gone: already dropped in some earlier pass,
+ * likely before error tracking existed to explain why. There is no
+ * future flush that will ever resolve that id -- retrying it forever is
+ * exactly the "stays stuck no matter what" bug this fixes. */
+function splitMediaIds(
+  ids: string[] | undefined,
+  resolved: Map<string, string>,
+  errors: Map<string, string>,
+): { finalIds: string[]; pendingId?: string; lostCount: number } {
+  const finalIds: string[] = [];
+  let pendingId: string | undefined;
+  let lostCount = 0;
+  for (const id of ids ?? []) {
+    if (!id.startsWith(PENDING_MEDIA_PREFIX)) {
+      finalIds.push(id);
+    } else if (resolved.has(id)) {
+      finalIds.push(resolved.get(id)!);
+    } else if (errors.has(id)) {
+      pendingId = pendingId ?? id;
+      finalIds.push(id);
+    } else {
+      lostCount++;
+      // Dropped entirely -- not pushed to finalIds.
+    }
+  }
+  return { finalIds, pendingId, lostCount };
 }
 
 let flushing = false;
@@ -437,15 +462,25 @@ export async function flushQueue(): Promise<void> {
         // it uploaded successfully).
         let toSend: QueuedSubmission = item;
         if (item.kind === "incident" || item.kind === "result") {
-          const mediaIds = replaceMediaIds(item.input.media_ids, resolved);
-          const stuckId = unresolvedMediaId(mediaIds);
-          if (stuckId) {
-            const reason = mediaErrors.get(stuckId) ?? "Still waiting for a connection to upload the attachment";
+          const { finalIds, pendingId, lostCount } = splitMediaIds(item.input.media_ids, resolved, mediaErrors);
+          if (pendingId) {
+            const reason = mediaErrors.get(pendingId)!;
             log(`${item.kind} ${item.id} still references unresolved media, skipping for now (not blocking the rest): ${reason}`);
             if (item.lastError !== reason) await idbPut({ ...item, lastError: reason });
             continue;
           }
-          toSend = { ...item, input: { ...item.input, media_ids: mediaIds } } as QueuedSubmission;
+          if (lostCount > 0) {
+            // Nothing left to wait for -- the blob(s) are gone for good.
+            // Sending without them beats blocking the rest of the report
+            // forever on evidence that will never come back; the agent
+            // is told explicitly so they know to recapture if it matters.
+            log(`${item.kind} ${item.id} permanently lost ${lostCount} attachment(s) (no longer in the offline queue) -- sending without them`);
+            toast.error(
+              `${lostCount > 1 ? "Some attachments" : "An attachment"} on your saved ${item.kind === "incident" ? "report" : "result"} couldn't be recovered and won't be included. The rest is being sent now.`,
+              { duration: 10000 },
+            );
+          }
+          toSend = { ...item, input: { ...item.input, media_ids: finalIds }, lastError: undefined } as QueuedSubmission;
         }
         try {
           await sendOne(toSend);
