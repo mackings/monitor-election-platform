@@ -18,7 +18,7 @@ import { listPollingUnits } from "@/lib/api/pollingUnits";
 import type { PollingUnit } from "@/types";
 import { UserPlus, X } from "lucide-react";
 
-const MAX_PU_RESULTS = 8;
+const MAX_PU_RESULTS = 10;
 
 /** Search-select for the assigned PU: types-and-picks a real polling unit
  * rather than free-typing a code, since a mistyped code used to save
@@ -46,13 +46,21 @@ function PUPicker({ value, onChange }: { value: PollingUnit | null; onChange: (p
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // With no query typed yet, still show a default slice (alphabetical)
+  // rather than nothing -- an empty text box with no visible dropdown
+  // doesn't read as "click to browse," it reads as "there's nothing
+  // here." Typing narrows this same list via search.
   const results = useMemo(() => {
+    if (!allPUs) return [];
     const q = query.trim().toLowerCase();
-    if (!q || !allPUs) return [];
+    if (!q) {
+      return [...allPUs].sort((a, b) => a.pu_name.localeCompare(b.pu_name)).slice(0, MAX_PU_RESULTS);
+    }
     return allPUs
       .filter((pu) => pu.pu_code.toLowerCase().includes(q) || pu.pu_name.toLowerCase().includes(q))
       .slice(0, MAX_PU_RESULTS);
   }, [query, allPUs]);
+  const showingDefault = query.trim().length === 0;
 
   if (value) {
     return (
@@ -86,7 +94,10 @@ function PUPicker({ value, onChange }: { value: PollingUnit | null; onChange: (p
         onFocus={() => setOpen(true)}
       />
       {open && results.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-input bg-popover shadow-md">
+        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-auto rounded-md border border-input bg-popover shadow-md">
+          {showingDefault && (
+            <p className="px-3 py-1.5 text-xs text-muted-foreground">Type to search by name or code…</p>
+          )}
           {results.map((pu) => (
             <button
               key={pu.pu_code}
@@ -162,7 +173,7 @@ export function CreateOfficerDialog({ onCreated, role = "field_officer" }: Creat
         <UserPlus className="h-4 w-4" />
         {isAdminInvite ? "Invite admin" : "Add agent"}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         {result ? (
           <>
             <DialogHeader>
