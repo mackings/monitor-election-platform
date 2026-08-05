@@ -52,10 +52,16 @@ export function PendingSubmissionsList({ kinds }: { kinds: QueuedSubmission["kin
   // browsers/networks, so this gives the agent a way to just push it
   // themselves instead of waiting and wondering whether it's stuck.
   async function handleSyncNow() {
+    // Logged unconditionally, before anything else -- if this line
+    // never shows up in the console when the button is tapped, the
+    // click itself isn't reaching React (a hit-area/overlay problem),
+    // not a bug in what happens after.
+    console.debug("[offline-queue] Sync now tapped");
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       toast.error("Still offline — connect to the internet and try again.");
       return;
     }
+    toast.info("Syncing…");
     await flushQueue();
   }
 
@@ -93,13 +99,18 @@ export function PendingSubmissionsList({ kinds }: { kinds: QueuedSubmission["kin
           type="button"
           onClick={handleSyncNow}
           disabled={syncing}
+          // min-h-9 (36px) rather than letting text-xs padding alone
+          // decide the tap target -- comfortably above the ~24px this
+          // was rendering at before, which is small enough on a real
+          // touchscreen (as opposed to a mouse cursor) to plausibly
+          // explain taps missing it outright.
           className={
             hasDistress
-              ? "flex shrink-0 items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-200 disabled:cursor-wait disabled:opacity-60 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-red-500/30"
-              : "flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-200 disabled:cursor-wait disabled:opacity-60 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30"
+              ? "flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-red-100 px-3.5 py-2 text-xs font-medium text-red-700 transition-colors hover:bg-red-200 active:bg-red-300 disabled:cursor-wait disabled:opacity-60 dark:bg-red-500/20 dark:text-red-300 dark:hover:bg-red-500/30"
+              : "flex min-h-9 shrink-0 items-center gap-1.5 rounded-full bg-amber-100 px-3.5 py-2 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-200 active:bg-amber-300 disabled:cursor-wait disabled:opacity-60 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30"
           }
         >
-          <RefreshCw className={syncing ? "h-3 w-3 animate-spin" : "h-3 w-3"} />
+          <RefreshCw className={syncing ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
           {syncing ? "Syncing…" : "Sync now"}
         </button>
       </div>
