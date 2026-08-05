@@ -32,11 +32,17 @@ function log(...args: unknown[]) {
 // actually deliver the evidence once back online, instead of only saving
 // the text fields and quietly dropping the photo.
 
+// `lastError` is deliberately on every kind, not just the ones with
+// media -- it's the answer to "why is this still stuck" and needs to
+// survive both a page refresh and repeated failed flush attempts,
+// visible directly in the app (PendingSubmissionsList) rather than only
+// in a console the agent has no practical way to open on a phone.
 interface QueuedIncident {
   id: string;
   kind: "incident";
   createdAt: number;
   input: CreateIncidentInput;
+  lastError?: string;
 }
 
 interface QueuedResult {
@@ -44,6 +50,7 @@ interface QueuedResult {
   kind: "result";
   createdAt: number;
   input: SubmitResultInput;
+  lastError?: string;
 }
 
 // Check-in/out, a status update, and a distress alert are all short
@@ -57,12 +64,14 @@ interface QueuedCheckIn {
   kind: "checkin";
   createdAt: number;
   input: { lat: number; lng: number };
+  lastError?: string;
 }
 
 interface QueuedCheckOut {
   id: string;
   kind: "checkout";
   createdAt: number;
+  lastError?: string;
 }
 
 interface QueuedStatus {
@@ -70,6 +79,7 @@ interface QueuedStatus {
   kind: "status";
   createdAt: number;
   input: { pu_code: string; status: PUStatus; note?: string };
+  lastError?: string;
 }
 
 interface QueuedDistress {
@@ -77,6 +87,7 @@ interface QueuedDistress {
   kind: "distress";
   createdAt: number;
   input: { pu_code: string; lat: number; lng: number };
+  lastError?: string;
 }
 
 export type QueuedSubmission =
@@ -188,6 +199,16 @@ function isSessionExpired(err: unknown): boolean {
   return err instanceof ApiError && err.status === 401;
 }
 
+/** A short, human-readable reason worth showing directly in the app --
+ * an agent on a phone has no practical way to open devtools, so "why is
+ * this still stuck" has to be readable off the pending list itself. */
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) return `Server error (${err.status}): ${err.message}`;
+  if (err instanceof DOMException && err.name === "AbortError") return "Upload timed out -- connection may be too slow";
+  if (err instanceof Error) return err.message || "Unknown error";
+  return "Unknown error";
+}
+
 export async function queueIncident(input: CreateIncidentInput): Promise<void> {
   await idbPut<QueuedIncident>({ id: uuid(), kind: "incident", createdAt: Date.now(), input });
   await notify();
@@ -272,14 +293,21 @@ export async function peekQueuedMedia(
 }
 
 /** Attempts to upload every pending media blob, returning a map of
- * resolved local id -> real server media id for whichever succeeded.
- * Anything still offline, or blocked by a retriable server condition, is
- * left in place for next time; only a genuine validation rejection is
- * dropped rather than retried forever. Stops immediately on a 401 --
- * see isSessionExpired -- rather than burning through every other queued
- * blob with the same dead token. */
-async function resolvePendingMedia(): Promise<{ resolved: Map<string, string>; sessionExpired: boolean }> {
+ * resolved local id -> real server media id for whichever succeeded, and
+ * a map of local id -> human-readable failure reason for whichever
+ * didn't (so the incident/result still referencing it can show *why* --
+ * see flushQueue). Anything still offline, or blocked by a retriable
+ * server condition, is left in place for next time; only a genuine
+ * validation rejection is dropped rather than retried forever. Stops
+ * immediately on a 401 -- see isSessionExpired -- rather than burning
+ * through every other queued blob with the same dead token. */
+async function resolvePendingMedia(): Promise<{
+  resolved: Map<string, string>;
+  errors: Map<string, string>;
+  sessionExpired: boolean;
+}> {
   const resolved = new Map<string, string>();
+  const errors = new Map<string, string>();
   const all = await idbGetAll<QueuedSubmission | QueuedMedia>();
   const pending = all.filter((i): i is QueuedMedia => i.kind === "media");
   for (const item of pending) {
@@ -292,25 +320,27 @@ async function resolvePendingMedia(): Promise<{ resolved: Map<string, string>; s
     } catch (err) {
       if (isSessionExpired(err)) {
         log(`media ${item.id} hit a 401 -- session expired, stopping this flush pass`);
-        return { resolved, sessionExpired: true };
+        return { resolved, errors, sessionExpired: true };
       }
       if (isRetriable(err)) {
-        log(`media ${item.id} still can't upload, leaving queued:`, err);
+        const reason = describeError(err);
+        errors.set(item.id, reason);
+        log(`media ${item.id} still can't upload, leaving queued: ${reason}`, err);
         continue;
       }
       log(`media ${item.id} permanently rejected, dropping:`, err);
       await idbDelete(item.id);
     }
   }
-  return { resolved, sessionExpired: false };
+  return { resolved, errors, sessionExpired: false };
 }
 
 function replaceMediaIds(ids: string[] | undefined, resolved: Map<string, string>): string[] | undefined {
   return ids?.map((id) => resolved.get(id) ?? id);
 }
 
-function hasUnresolvedMedia(ids: string[] | undefined): boolean {
-  return (ids ?? []).some((id) => id.startsWith(PENDING_MEDIA_PREFIX));
+function unresolvedMediaId(ids: string[] | undefined): string | undefined {
+  return (ids ?? []).find((id) => id.startsWith(PENDING_MEDIA_PREFIX));
 }
 
 let flushing = false;
@@ -386,7 +416,7 @@ export async function flushQueue(): Promise<void> {
   setSyncing(true);
   let syncedCount = 0;
   try {
-    const { resolved, sessionExpired } = await resolvePendingMedia();
+    const { resolved, errors: mediaErrors, sessionExpired } = await resolvePendingMedia();
     if (sessionExpired) return;
     const queue = await getSubmissionQueue();
     const groups = new Map<string, QueuedSubmission[]>();
@@ -408,8 +438,11 @@ export async function flushQueue(): Promise<void> {
         let toSend: QueuedSubmission = item;
         if (item.kind === "incident" || item.kind === "result") {
           const mediaIds = replaceMediaIds(item.input.media_ids, resolved);
-          if (hasUnresolvedMedia(mediaIds)) {
-            log(`${item.kind} ${item.id} still references unresolved media, skipping for now (not blocking the rest)`);
+          const stuckId = unresolvedMediaId(mediaIds);
+          if (stuckId) {
+            const reason = mediaErrors.get(stuckId) ?? "Still waiting for a connection to upload the attachment";
+            log(`${item.kind} ${item.id} still references unresolved media, skipping for now (not blocking the rest): ${reason}`);
+            if (item.lastError !== reason) await idbPut({ ...item, lastError: reason });
             continue;
           }
           toSend = { ...item, input: { ...item.input, media_ids: mediaIds } } as QueuedSubmission;
@@ -425,8 +458,9 @@ export async function flushQueue(): Promise<void> {
             break groupLoop;
           }
           if (isRetriable(err)) {
-            log(`${item.kind} ${item.id} still can't send, leaving queued (group "${groupName}" stops here this pass):`, err);
-            if (toSend !== item) await idbPut(toSend);
+            const reason = describeError(err);
+            log(`${item.kind} ${item.id} still can't send, leaving queued (group "${groupName}" stops here this pass): ${reason}`, err);
+            await idbPut({ ...toSend, lastError: reason });
             continue groupLoop;
           }
           // A real validation rejection: drop it rather than retry

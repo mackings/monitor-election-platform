@@ -139,6 +139,11 @@ export function PendingSubmissionsList({ kinds }: { kinds: QueuedSubmission["kin
                 Saved {formatDistanceToNow(item.createdAt, { addSuffix: true })}
                 {count > 0 && ` · ${count} attachment${count > 1 ? "s" : ""}`}
               </p>
+              {item.lastError && (
+                <p className="mt-1 rounded bg-red-50 px-1.5 py-1 text-[11px] text-red-700 dark:bg-red-500/10 dark:text-red-400">
+                  Still stuck: {item.lastError}
+                </p>
+              )}
             </li>
           );
         })}
