@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,9 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { MediaUploader } from "@/components/field/MediaUploader";
 import { VoiceRecorder } from "@/components/field/VoiceRecorder";
+import { PendingSubmissionsList } from "@/components/field/PendingSubmissionsList";
 import { useResolvedLocation } from "@/lib/hooks/useResolvedLocation";
 import { createIncident } from "@/lib/api/incidents";
 import { queueIncident, PENDING_MEDIA_PREFIX } from "@/lib/offline/queue";
+import { saveDraft, loadDraft, clearDraft } from "@/lib/offline/draft";
 import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useAssignedPU } from "@/components/field/AssignedPUContext";
@@ -27,18 +29,45 @@ const INCIDENT_TYPES = [
   "Other",
 ];
 
+const DRAFT_KEY = "field:draft:incident-report";
+
+interface ReportDraft {
+  type: string;
+  description: string;
+  severity: Severity;
+  mediaIds: string[];
+  voiceMediaIds: string[];
+}
+
 export default function IncidentReportPage() {
   const puCode = useAuthStore((s) => s.user?.assigned_pu_code ?? "");
   const assignedPU = useAssignedPU();
   const { resolve } = useResolvedLocation();
-  const [type, setType] = useState("");
-  const [description, setDescription] = useState("");
-  const [severity, setSeverity] = useState<Severity>("medium");
-  const [mediaIds, setMediaIds] = useState<string[]>([]);
-  const [voiceMediaIds, setVoiceMediaIds] = useState<string[]>([]);
+  // Read fresh on every mount (not hoisted to a module-level constant,
+  // which would only ever reflect whatever was in storage the first time
+  // this module was evaluated) -- each useState only calls its
+  // initializer once, on that mount, so the very first render already
+  // has the right values and the child uploaders' own mount-time restore
+  // (see MediaUploader's initialMediaIds) sees the real list immediately
+  // instead of an empty array followed by a late update.
+  const draft = loadDraft<ReportDraft>(DRAFT_KEY);
+  const [type, setType] = useState(() => draft?.type ?? "");
+  const [description, setDescription] = useState(() => draft?.description ?? "");
+  const [severity, setSeverity] = useState<Severity>(() => draft?.severity ?? "medium");
+  const [mediaIds, setMediaIds] = useState<string[]>(() => draft?.mediaIds ?? []);
+  const [voiceMediaIds, setVoiceMediaIds] = useState<string[]>(() => draft?.voiceMediaIds ?? []);
   const [uploading, setUploading] = useState(false);
   const [voiceUploading, setVoiceUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Persists the in-progress draft on every change -- this is what makes
+  // "picked a photo, left the page, came back" not lose the attachment:
+  // the page's own fields (and the media/voice id lists the uploaders
+  // report back via onChange) survive a remount, not just an
+  // already-submitted queued item.
+  useEffect(() => {
+    saveDraft<ReportDraft>(DRAFT_KEY, { type, description, severity, mediaIds, voiceMediaIds });
+  }, [type, description, severity, mediaIds, voiceMediaIds]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,6 +106,10 @@ export default function IncidentReportPage() {
       setSeverity("medium");
       setMediaIds([]);
       setVoiceMediaIds([]);
+      // The draft's job ends here -- either it went out live or it's now
+      // durably tracked in the offline queue (PendingSubmissionsList),
+      // so there's nothing left for the draft copy to preserve.
+      clearDraft(DRAFT_KEY);
     }
     try {
       if (input.media_ids.some((id) => id.startsWith(PENDING_MEDIA_PREFIX))) {
@@ -117,6 +150,8 @@ export default function IncidentReportPage() {
           <p className="text-xs text-muted-foreground">Flag anything unusual at your polling unit</p>
         </div>
       </div>
+
+      <PendingSubmissionsList kind="incident" />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
@@ -163,8 +198,18 @@ export default function IncidentReportPage() {
 
         <div className="space-y-2">
           <Label>Evidence</Label>
-          <MediaUploader relatedType="incident" onChange={setMediaIds} onUploadingChange={setUploading} />
-          <VoiceRecorder relatedType="incident" onChange={setVoiceMediaIds} onUploadingChange={setVoiceUploading} />
+          <MediaUploader
+            relatedType="incident"
+            initialMediaIds={mediaIds}
+            onChange={setMediaIds}
+            onUploadingChange={setUploading}
+          />
+          <VoiceRecorder
+            relatedType="incident"
+            initialMediaIds={voiceMediaIds}
+            onChange={setVoiceMediaIds}
+            onUploadingChange={setVoiceUploading}
+          />
         </div>
 
         <Input value={puCode} readOnly className="hidden" />

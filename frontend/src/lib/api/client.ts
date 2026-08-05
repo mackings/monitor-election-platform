@@ -2,6 +2,14 @@ import { useSessionStore } from "@/lib/store/useSessionStore";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8081";
 
+// A request made right as connectivity drops can hang far longer than a
+// user will wait -- some OS/browser combinations take 60s+ to give up on
+// a dead TCP connection on their own. Without a bound, a single in-flight
+// request like that blocks anything awaiting it (notably the offline
+// queue's `flushing` guard in lib/offline/queue.ts) for that entire time,
+// silently suppressing every other retry trigger in the meantime.
+const REQUEST_TIMEOUT_MS = 20000;
+
 const TOKEN_KEY = "monitor_token";
 
 export function getToken(): string | null {
@@ -40,7 +48,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
   const body = await res.json().catch(() => ({}));
 
   if (!res.ok) {

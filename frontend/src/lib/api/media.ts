@@ -41,11 +41,33 @@ export async function uploadFile(
   proof?: CaptureProof,
 ): Promise<Media> {
   const presigned = await presignUpload(file.type);
-  await fetch(presigned.upload_url, {
-    method: "PUT",
-    headers: { "Content-Type": file.type },
-    body: file,
-  });
+  // Longer bound than the JSON API calls -- a real photo/video upload on a
+  // slow-but-working connection can legitimately take a while, so this
+  // only exists to stop a genuinely dead connection attempt from hanging
+  // indefinitely (see client.ts's REQUEST_TIMEOUT_MS for why that matters
+  // to the offline queue specifically), not to cut off a slow-but-real upload.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60000);
+  let res: Response;
+  try {
+    res = await fetch(presigned.upload_url, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!res.ok) {
+    // An HTTP-level rejection from storage (expired presigned URL, wrong
+    // content-type, a transient 5xx) -- deliberately a plain Error, not
+    // ApiError, so callers' isRetriable check (lib/offline/queue.ts)
+    // treats this the same as a dropped connection and queues the file
+    // for retry instead of silently registering a Media record for bytes
+    // that were never actually stored.
+    throw new Error(`Upload to storage failed (${res.status})`);
+  }
   return registerMedia({
     object_key: presigned.object_key,
     content_type: file.type,

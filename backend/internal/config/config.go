@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,21 @@ func envOr(key, def string) string {
 	return def
 }
 
+// corsOrigins splits on commas so a deployment can allow more than one
+// origin (e.g. testing from a LAN IP alongside localhost) without needing
+// a code change -- a single bare origin (the common case) round-trips
+// through this unchanged.
+func corsOrigins(v string) []string {
+	parts := strings.Split(v, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p := strings.TrimSpace(p); p != "" {
+			origins = append(origins, p)
+		}
+	}
+	return origins
+}
+
 func Load() *Config {
 	smtpPort, err := strconv.Atoi(envOr("SMTP_PORT", "587"))
 	if err != nil {
@@ -52,7 +68,7 @@ func Load() *Config {
 		R2SecretKey:     envOr("R2_SECRET_KEY", ""),
 		R2Bucket:        envOr("R2_BUCKET", ""),
 		R2PublicBaseURL: envOr("R2_PUBLIC_BASE_URL", ""),
-		CORSOrigins:     []string{envOr("CORS_ORIGIN", "http://localhost:3000")},
+		CORSOrigins:     corsOrigins(envOr("CORS_ORIGIN", "http://localhost:3000")),
 		SMTPHost:        envOr("SMTP_HOST", ""),
 		SMTPPort:        smtpPort,
 		SMTPUser:        envOr("SMTP_USER", ""),

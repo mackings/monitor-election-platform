@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { uploadFile } from "@/lib/api/media";
+import { useEffect, useRef, useState } from "react";
+import { uploadFile, getMediaBatch } from "@/lib/api/media";
 import { ApiError } from "@/lib/api/client";
-import { queueMedia, dequeueMedia } from "@/lib/offline/queue";
+import { queueMedia, dequeueMedia, peekQueuedMedia, PENDING_MEDIA_PREFIX } from "@/lib/offline/queue";
 import { watermarkAndHash } from "@/lib/media/watermark";
 import { useGeolocation } from "@/lib/hooks/useGeolocation";
+import { uuid } from "@/lib/uuid";
 import { Camera, X, Loader2, ShieldCheck, CloudOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -25,6 +26,7 @@ interface Item {
 export function VoteSheetUploader({
   puCode,
   puName,
+  initialMediaIds,
   onChange,
   onUploadingChange,
 }: {
@@ -32,12 +34,60 @@ export function VoteSheetUploader({
   /** Human-readable PU name, watermarked onto the photo instead of the
    * bare code when known -- falls back to the code if not loaded yet. */
   puName?: string;
+  /** Restores this uploader's displayed item list from a persisted draft
+   * -- see MediaUploader's identical prop for why this exists. */
+  initialMediaIds?: string[];
   onChange: (mediaIds: string[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Item[]>([]);
   const { locate } = useGeolocation();
+
+  useEffect(() => {
+    const ids = initialMediaIds ?? [];
+    if (ids.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const localIds = ids.filter((id) => id.startsWith(PENDING_MEDIA_PREFIX));
+      const realIds = ids.filter((id) => !id.startsWith(PENDING_MEDIA_PREFIX));
+      const restored: Item[] = [];
+
+      for (const id of localIds) {
+        const meta = await peekQueuedMedia(id);
+        if (meta) {
+          restored.push({
+            id: uuid(),
+            mediaId: id,
+            name: meta.name,
+            fingerprint: meta.proof?.sha256?.slice(0, 10) ?? "",
+            status: "queued",
+          });
+        }
+      }
+      if (realIds.length > 0) {
+        try {
+          const media = await getMediaBatch(realIds);
+          for (const m of media) {
+            restored.push({
+              id: uuid(),
+              mediaId: m.id,
+              name: "Result sheet photo",
+              fingerprint: m.sha256?.slice(0, 10) ?? "",
+              status: "done",
+            });
+          }
+        } catch {
+          // Best-effort restore -- see MediaUploader's identical catch.
+        }
+      }
+      if (!cancelled && restored.length > 0) notify(restored);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function notify(next: Item[]) {
     setItems(next);
@@ -51,7 +101,7 @@ export function VoteSheetUploader({
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
     const newItems: Item[] = Array.from(files).map((f) => ({
-      id: crypto.randomUUID(),
+      id: uuid(),
       mediaId: "",
       name: f.name,
       fingerprint: "",

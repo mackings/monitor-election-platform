@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMapStore } from "@/lib/store/useMapStore";
 import { submitManualResult } from "@/lib/api/collation";
+import { uuid } from "@/lib/uuid";
 import { toast } from "sonner";
 import { MessageSquareText, Plus, Trash2 } from "lucide-react";
 
@@ -39,13 +40,13 @@ export function LogSmsResultDialog({ onLogged }: { onLogged?: () => void }) {
 
   const [open, setOpen] = useState(false);
   const [officerId, setOfficerId] = useState("");
-  const [rows, setRows] = useState<Row[]>([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
+  const [rows, setRows] = useState<Row[]>([{ id: uuid(), candidate: "", votes: "" }]);
   const [accredited, setAccredited] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   function reset() {
     setOfficerId("");
-    setRows([{ id: crypto.randomUUID(), candidate: "", votes: "" }]);
+    setRows([{ id: uuid(), candidate: "", votes: "" }]);
     setAccredited("");
   }
 
@@ -53,7 +54,7 @@ export function LogSmsResultDialog({ onLogged }: { onLogged?: () => void }) {
     setRows((r) => r.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
   function addRow() {
-    setRows((r) => [...r, { id: crypto.randomUUID(), candidate: "", votes: "" }]);
+    setRows((r) => [...r, { id: uuid(), candidate: "", votes: "" }]);
   }
   function removeRow(id: string) {
     setRows((r) => r.filter((row) => row.id !== id));

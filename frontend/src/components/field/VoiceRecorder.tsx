@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { uploadFile } from "@/lib/api/media";
+import { useEffect, useRef, useState } from "react";
+import { uploadFile, getMediaBatch } from "@/lib/api/media";
 import { ApiError } from "@/lib/api/client";
-import { queueMedia, dequeueMedia } from "@/lib/offline/queue";
+import { queueMedia, dequeueMedia, peekQueuedMedia, PENDING_MEDIA_PREFIX } from "@/lib/offline/queue";
+import { uuid } from "@/lib/uuid";
 import { Mic, Square, Trash2, Loader2, CheckCircle2, Play, Pause, CloudOff } from "lucide-react";
 import { toast } from "sonner";
 
@@ -36,10 +37,14 @@ function formatDuration(seconds: number): string {
 
 export function VoiceRecorder({
   relatedType,
+  initialMediaIds,
   onChange,
   onUploadingChange,
 }: {
   relatedType: "incident" | "result";
+  /** Restores this recorder's displayed note list from a persisted draft
+   * -- see MediaUploader's identical prop for why this exists. */
+  initialMediaIds?: string[];
   onChange: (mediaIds: string[]) => void;
   onUploadingChange?: (uploading: boolean) => void;
 }) {
@@ -53,6 +58,51 @@ export function VoiceRecorder({
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const ids = initialMediaIds ?? [];
+    if (ids.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const localIds = ids.filter((id) => id.startsWith(PENDING_MEDIA_PREFIX));
+      const realIds = ids.filter((id) => !id.startsWith(PENDING_MEDIA_PREFIX));
+      const restored: VoiceNote[] = [];
+
+      for (const id of localIds) {
+        const meta = await peekQueuedMedia(id);
+        if (meta) {
+          restored.push({
+            id: uuid(),
+            mediaId: id,
+            url: URL.createObjectURL(meta.blob),
+            durationLabel: "",
+            status: "queued",
+          });
+        }
+      }
+      if (realIds.length > 0) {
+        try {
+          const media = await getMediaBatch(realIds);
+          for (const m of media) {
+            restored.push({
+              id: uuid(),
+              mediaId: m.id,
+              url: m.url,
+              durationLabel: "",
+              status: "done",
+            });
+          }
+        } catch {
+          // Best-effort restore -- see MediaUploader's identical catch.
+        }
+      }
+      if (!cancelled && restored.length > 0) notify(restored);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function notify(next: VoiceNote[]) {
     setNotes(next);
@@ -106,7 +156,7 @@ export function VoiceRecorder({
     const blob = new Blob(chunksRef.current, { type: mimeType || "audio/webm" });
     if (blob.size === 0) return;
 
-    const id = crypto.randomUUID();
+    const id = uuid();
     const durationLabel = formatDuration(elapsed);
     const url = URL.createObjectURL(blob);
     let working = [...notes, { id, mediaId: "", url, durationLabel, status: "uploading" as const }];
@@ -198,7 +248,7 @@ export function VoiceRecorder({
                     {playingId === note.id ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                   </button>
                 )}
-                <span>Voice note · {note.durationLabel}</span>
+                <span>Voice note{note.durationLabel ? ` · ${note.durationLabel}` : ""}</span>
               </div>
               <div className="flex items-center gap-2">
                 {note.status === "uploading" && <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-500" />}
