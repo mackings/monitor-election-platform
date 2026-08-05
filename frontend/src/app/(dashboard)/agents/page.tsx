@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreateOfficerDialog } from "@/components/dashboard/CreateOfficerDialog";
+import { BulkImportOfficersDialog } from "@/components/dashboard/BulkImportOfficersDialog";
 import { AgentDetailSheet } from "@/components/dashboard/AgentDetailSheet";
 import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
 import type { OfficerStatus, User } from "@/types";
@@ -75,7 +76,10 @@ export default function AgentsPage() {
               : `${officers.length} registered field agents`}
           </p>
         </div>
-        <CreateOfficerDialog onCreated={() => listOfficers().then(setOfficers)} />
+        <div className="flex items-center gap-2">
+          <BulkImportOfficersDialog onImported={() => listOfficers().then(setOfficers)} />
+          <CreateOfficerDialog onCreated={() => listOfficers().then(setOfficers)} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

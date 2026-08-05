@@ -139,6 +139,44 @@ func (u *Usecase) CreateOfficer(ctx context.Context, in CreateOfficerInput) (*Cr
 	return &CreateOfficerResult{User: user, Username: username, Password: password, EmailSent: emailSent}, nil
 }
 
+// BulkOfficerRowResult reports one CSV row's outcome -- a bad row (unknown
+// PU code, missing name) never aborts the rest of the batch, since an
+// admin importing 200 agents shouldn't lose the other 199 because row 57
+// had a typo.
+type BulkOfficerRowResult struct {
+	Row      int    `json:"row"`
+	Name     string `json:"name"`
+	Success  bool   `json:"success"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// BulkCreateOfficers runs CreateOfficer once per row so every invariant it
+// already enforces (PU-code validation, credential generation, the PU
+// back-reference update, best-effort invite email) applies identically to
+// a bulk import as to a single manual add -- this only adds the per-row
+// isolation on top.
+func (u *Usecase) BulkCreateOfficers(ctx context.Context, rows []CreateOfficerInput) []BulkOfficerRowResult {
+	results := make([]BulkOfficerRowResult, len(rows))
+	for i, in := range rows {
+		row := i + 1
+		if strings.TrimSpace(in.Name) == "" {
+			results[i] = BulkOfficerRowResult{Row: row, Name: in.Name, Error: "name is required"}
+			continue
+		}
+		result, err := u.CreateOfficer(ctx, in)
+		if err != nil {
+			results[i] = BulkOfficerRowResult{Row: row, Name: in.Name, Error: err.Error()}
+			continue
+		}
+		results[i] = BulkOfficerRowResult{
+			Row: row, Name: in.Name, Success: true, Username: result.Username, Password: result.Password,
+		}
+	}
+	return results
+}
+
 type SignupInput struct {
 	Name     string
 	Phone    string

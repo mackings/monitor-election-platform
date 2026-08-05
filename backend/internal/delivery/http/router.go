@@ -58,6 +58,7 @@ func NewRouter(h Handlers, tokens *jwtutil.Manager, corsOrigins []string) http.H
 			r.Group(func(r chi.Router) {
 				r.Use(appmw.RequireRole(domain.RoleAdmin, domain.RoleSupervisor))
 				r.Post("/officers", h.Auth.CreateOfficer)
+		r.Post("/officers/bulk", h.Auth.BulkCreateOfficers)
 				r.Get("/officers", h.Officer.List)
 				r.Post("/officers/assign", h.Officer.Assign)
 				r.Post("/officers/assign-sub", h.Officer.AssignSubAgent)

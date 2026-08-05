@@ -43,6 +43,22 @@ export function createOfficer(input: CreateOfficerInput) {
   return api.post<CreateOfficerResult>("/api/v1/officers", input);
 }
 
+export interface BulkOfficerRowResult {
+  row: number;
+  name: string;
+  success: boolean;
+  username?: string;
+  password?: string;
+  error?: string;
+}
+
+/** Each row goes through the exact same CreateOfficer path a manual add
+ * would use -- a bad row (typo'd PU code, missing name) reports its own
+ * error without sinking the rest of the batch. */
+export function bulkCreateOfficers(rows: CreateOfficerInput[]) {
+  return api.post<{ results: BulkOfficerRowResult[] }>("/api/v1/officers/bulk", { rows });
+}
+
 export function changePassword(currentPassword: string, newPassword: string) {
   return api.post<{ status: string }>("/api/v1/auth/change-password", {
     current_password: currentPassword,

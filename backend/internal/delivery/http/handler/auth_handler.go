@@ -73,6 +73,57 @@ func (h *AuthHandler) CreateOfficer(w http.ResponseWriter, r *http.Request) {
 	httpresp.JSON(w, http.StatusCreated, result)
 }
 
+// BulkCreateOfficers takes the rows an admin parsed out of an uploaded
+// CSV/spreadsheet client-side (parsing happens in the browser -- this
+// endpoint just runs each row through the same CreateOfficer path a
+// one-at-a-time add would use) and reports a per-row result rather than a
+// single pass/fail, so one bad row doesn't sink the rest of the import.
+func (h *AuthHandler) BulkCreateOfficers(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Rows []struct {
+			Name           string      `json:"name"`
+			Phone          string      `json:"phone"`
+			Email          string      `json:"email"`
+			Role           domain.Role `json:"role"`
+			AssignedPUCode string      `json:"assigned_pu_code"`
+		} `json:"rows"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if len(body.Rows) == 0 {
+		httpresp.Error(w, http.StatusBadRequest, "no rows to import")
+		return
+	}
+	isAdmin := middleware.UserRole(r.Context()) == string(domain.RoleAdmin)
+	inputs := make([]auth.CreateOfficerInput, len(body.Rows))
+	// Same admin-inviting-admin restriction as the single-add path,
+	// enforced per row rather than rejecting the whole batch — a
+	// supervisor bulk-importing field officers shouldn't have the entire
+	// CSV bounce just because one row's role column said "admin". Rather
+	// than silently downgrading that row's role (which would create an
+	// account the admin didn't ask for without telling them), it's
+	// reported back as that row's error, same as any other bad row.
+	forbiddenAdminRows := map[int]bool{}
+	for i, row := range body.Rows {
+		if row.Role == domain.RoleAdmin && !isAdmin {
+			forbiddenAdminRows[i] = true
+			continue
+		}
+		inputs[i] = auth.CreateOfficerInput{
+			Name: row.Name, Phone: row.Phone, Email: row.Email, Role: row.Role, AssignedPUCode: row.AssignedPUCode,
+		}
+	}
+	results := h.auth.BulkCreateOfficers(r.Context(), inputs)
+	for i := range results {
+		if forbiddenAdminRows[i] {
+			results[i] = auth.BulkOfficerRowResult{Row: i + 1, Name: body.Rows[i].Name, Error: "only an admin can invite another admin"}
+		}
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
 func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name     string `json:"name"`
