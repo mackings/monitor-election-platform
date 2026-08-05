@@ -65,23 +65,32 @@ export function VoteSheetUploader({
           });
         }
       }
+      // A real (non-"local:") id already uploaded successfully in the
+      // past -- that's not in question, only its fingerprint display is.
+      // A failed getMediaBatch lookup must never make the id itself
+      // disappear from the restored list; notify() replaces this
+      // component's entire onChange output, so an id left out here is
+      // silently dropped from the next submit. See MediaUploader's
+      // identical fix for the full reasoning.
+      let fingerprints = new Map<string, string>();
       if (realIds.length > 0) {
         try {
           const media = await getMediaBatch(realIds);
-          for (const m of media) {
-            restored.push({
-              id: uuid(),
-              mediaId: m.id,
-              name: "Result sheet photo",
-              fingerprint: m.sha256?.slice(0, 10) ?? "",
-              status: "done",
-            });
-          }
+          fingerprints = new Map(media.map((m) => [m.id, m.sha256?.slice(0, 10) ?? ""]));
         } catch {
-          // Best-effort restore -- see MediaUploader's identical catch.
+          // Best-effort fingerprint lookup only -- ids are still restored below.
         }
       }
-      if (!cancelled && restored.length > 0) notify(restored);
+      for (const id of realIds) {
+        restored.push({
+          id: uuid(),
+          mediaId: id,
+          name: "Result sheet photo",
+          fingerprint: fingerprints.get(id) ?? "",
+          status: "done",
+        });
+      }
+      if (!cancelled) notify(restored);
     })();
     return () => {
       cancelled = true;

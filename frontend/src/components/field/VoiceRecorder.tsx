@@ -80,23 +80,26 @@ export function VoiceRecorder({
           });
         }
       }
+      // A real (non-"local:") id already uploaded successfully in the
+      // past -- that's not in question, only its playable URL is. A
+      // failed getMediaBatch lookup must never make the id itself
+      // disappear from the restored list; notify() replaces this
+      // component's entire onChange output, so an id left out here is
+      // silently dropped from the next submit. See MediaUploader's
+      // identical fix for the full reasoning.
+      let urls = new Map<string, string>();
       if (realIds.length > 0) {
         try {
           const media = await getMediaBatch(realIds);
-          for (const m of media) {
-            restored.push({
-              id: uuid(),
-              mediaId: m.id,
-              url: m.url,
-              durationLabel: "",
-              status: "done",
-            });
-          }
+          urls = new Map(media.map((m) => [m.id, m.url]));
         } catch {
-          // Best-effort restore -- see MediaUploader's identical catch.
+          // Best-effort URL lookup only -- ids are still restored below.
         }
       }
-      if (!cancelled && restored.length > 0) notify(restored);
+      for (const id of realIds) {
+        restored.push({ id: uuid(), mediaId: id, url: urls.get(id) ?? "", durationLabel: "", status: "done" });
+      }
+      if (!cancelled) notify(restored);
     })();
     return () => {
       cancelled = true;

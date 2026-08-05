@@ -50,28 +50,40 @@ export function MediaUploader({
       const realIds = ids.filter((id) => !id.startsWith(PENDING_MEDIA_PREFIX));
       const restored: UploadedItem[] = [];
 
+      // A "local:" id with no backing record anymore is genuinely gone
+      // (see lib/offline/queue.ts's splitMediaIds) -- correctly dropped
+      // here too, nothing to show.
       for (const id of localIds) {
         const meta = await peekQueuedMedia(id);
         if (meta) restored.push({ id: uuid(), mediaId: id, name: meta.name, status: "queued" });
       }
+
+      // A real (non-"local:") id means the upload+register already
+      // succeeded at some point in the past -- that's not in question,
+      // only its *display name* is. A failed getMediaBatch lookup (a
+      // transient network blip on this fetch alone) must never make the
+      // id itself disappear from the restored list: notify() below
+      // replaces this component's entire onChange output, so an id left
+      // out here is an id silently dropped from the next submit --
+      // exactly the failure mode that made an already-attached photo
+      // look "missing" and then vanish for real the moment a new one
+      // was attached afterward (working = [...items, ...newItems]
+      // starting from an incomplete `items`).
+      let names = new Map<string, string>();
       if (realIds.length > 0) {
         try {
           const media = await getMediaBatch(realIds);
-          for (const m of media) {
-            restored.push({
-              id: uuid(),
-              mediaId: m.id,
-              name: m.content_type.startsWith("video/") ? "Video" : "Photo",
-              status: "done",
-            });
-          }
+          names = new Map(media.map((m) => [m.id, m.content_type.startsWith("video/") ? "Video" : "Photo"]));
         } catch {
-          // Best-effort restore -- a failed lookup just means those
-          // already-uploaded attachments don't reappear in the list;
-          // their ids are still in the draft, so submit still works.
+          // Best-effort naming only -- the ids are still restored below
+          // regardless of whether this lookup succeeded.
         }
       }
-      if (!cancelled && restored.length > 0) notify(restored);
+      for (const id of realIds) {
+        restored.push({ id: uuid(), mediaId: id, name: names.get(id) ?? "Attachment", status: "done" });
+      }
+
+      if (!cancelled) notify(restored);
     })();
     return () => {
       cancelled = true;
