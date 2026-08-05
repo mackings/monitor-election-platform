@@ -41,13 +41,22 @@ export async function uploadFile(
   proof?: CaptureProof,
 ): Promise<Media> {
   const presigned = await presignUpload(file.type);
-  // Longer bound than the JSON API calls -- a real photo/video upload on a
-  // slow-but-working connection can legitimately take a while, so this
-  // only exists to stop a genuinely dead connection attempt from hanging
-  // indefinitely (see client.ts's REQUEST_TIMEOUT_MS for why that matters
-  // to the offline queue specifically), not to cut off a slow-but-real upload.
+  // Scaled by file size rather than flat -- a raw camera photo or video
+  // (MediaUploader, no recompression) can be many times larger than a
+  // watermarked result-sheet photo (canvas-recompressed at 0.92 quality
+  // in watermark.ts, typically much smaller) or a short voice note. A
+  // flat timeout sized for the small case would abort a legitimately
+  // slow-but-progressing large upload on a poor connection every single
+  // retry, forever -- indistinguishable from "never syncs" even though
+  // the connection genuinely is capable of finishing it, just not that
+  // fast. This still bounds a truly dead connection (the original point
+  // of having a timeout at all), just generously enough not to punish
+  // exactly the attachments most likely to be large: incident photos/
+  // videos.
+  const timeoutMs = Math.min(300000, 30000 + (file.size / (1024 * 1024)) * 20000);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
   let res: Response;
   try {
     res = await fetch(presigned.upload_url, {
@@ -56,6 +65,12 @@ export async function uploadFile(
       body: file,
       signal: controller.signal,
     });
+  } catch (err) {
+    console.debug(
+      `[media-upload] ${file.name} (${sizeMb}MB) failed within ${(timeoutMs / 1000).toFixed(0)}s budget:`,
+      err,
+    );
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
