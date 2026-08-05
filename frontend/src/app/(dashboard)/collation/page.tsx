@@ -12,14 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatTile } from "@/components/dashboard/StatTile";
 import { LogSmsResultDialog } from "@/components/dashboard/LogSmsResultDialog";
 import { PUVotesList, type PUVoteItem } from "@/components/dashboard/charts/PUVotesList";
+import { VoteBarChart } from "@/components/dashboard/charts/VoteBarChart";
 import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
+import { partyTotals, projectedVotes } from "@/lib/pollingUnits/partyTotals";
 import { Radio, Vote, CheckCircle2, Clock, ChevronRight } from "lucide-react";
 import type { PollingUnit, TallyRow } from "@/types";
-
-// This dashboard tracks one party at a glance, per how it's actually
-// used -- everyone reading it wants APM's numbers, not a general-purpose
-// multi-party comparison.
-const TRACKED_PARTY = "APM";
 
 interface TallyData {
   version: number;
@@ -39,6 +36,7 @@ export default function CollationPage() {
   const [lga, setLga] = useState("all");
   const [ward, setWard] = useState("all");
   const [agentId, setAgentId] = useState("all");
+  const [party, setParty] = useState("all");
 
   useEffect(() => {
     useNotificationStore.getState().markSeen("collation");
@@ -60,7 +58,8 @@ export default function CollationPage() {
   const stateRow = stale ? null : data?.stateRow ?? null;
   const puRows = useMemo(() => (stale ? [] : (data?.puRows ?? [])), [stale, data]);
 
-  const totalVotes = stateRow?.vote_counts?.[TRACKED_PARTY] ?? 0;
+  const parties = useMemo(() => partyTotals(stateRow?.vote_counts), [stateRow]);
+  const totalVotes = projectedVotes(stateRow?.vote_counts, party);
   const reportingCodes = useMemo(() => new Set(puRows.map((r) => r.key)), [puRows]);
 
   const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
@@ -91,12 +90,12 @@ export default function CollationPage() {
             name: pu?.pu_name ?? r.key,
             lga: pu?.lga ?? "",
             ward: pu?.ward ?? "",
-            votes: r.vote_counts?.[TRACKED_PARTY] ?? 0,
+            votes: projectedVotes(r.vote_counts, party),
           };
         })
         .filter((p) => p.votes > 0)
         .sort((a, b) => b.votes - a.votes),
-    [puRows, pollingUnitsMap, lga, ward, agentId],
+    [puRows, pollingUnitsMap, lga, ward, agentId, party],
   );
 
   const notRecordingCount = useMemo(
@@ -110,9 +109,6 @@ export default function CollationPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-heading text-2xl font-bold tracking-tight">Collation</h1>
-            <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
-              {TRACKED_PARTY}
-            </span>
             <span
               className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
               title="Updates automatically as new results come in"
@@ -128,7 +124,7 @@ export default function CollationPage() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <StatTile
-          label={`Total ${TRACKED_PARTY} votes`}
+          label={party === "all" ? "Total votes" : `Total ${party} votes`}
           value={totalVotes.toLocaleString()}
           icon={Vote}
           href="/collation/votes"
@@ -151,8 +147,17 @@ export default function CollationPage() {
 
       <Card className="rounded-2xl border-slate-200/70 dark:border-slate-800">
         <CardContent className="py-4">
+          <p className="mb-3 text-sm font-semibold">Votes by party</p>
+          <VoteBarChart voteCounts={stateRow?.vote_counts ?? {}} />
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-slate-200/70 dark:border-slate-800">
+        <CardContent className="py-4">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Polling units recording {TRACKED_PARTY} votes</p>
+            <p className="text-sm font-semibold">
+              Polling units recording {party === "all" ? "" : `${party} `}votes
+            </p>
             <Link
               href="/collation/recording"
               className="flex shrink-0 items-center text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
@@ -213,13 +218,28 @@ export default function CollationPage() {
               </SelectContent>
             </Select>
 
-            {(lga !== "all" || ward !== "all" || agentId !== "all") && (
+            <Select value={party} onValueChange={(v) => setParty(v ?? "all")}>
+              <SelectTrigger className="w-40 rounded-xl">
+                <SelectValue placeholder="All parties">{(v: string) => (v === "all" ? "All parties" : v)}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All parties</SelectItem>
+                {parties.map((p) => (
+                  <SelectItem key={p.party} value={p.party}>
+                    {p.party}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {(lga !== "all" || ward !== "all" || agentId !== "all" || party !== "all") && (
               <button
                 type="button"
                 onClick={() => {
                   setLga("all");
                   setWard("all");
                   setAgentId("all");
+                  setParty("all");
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground hover:underline"
               >

@@ -10,10 +10,9 @@ import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
 import { PUVotesList, type PUVoteItem } from "@/components/dashboard/charts/PUVotesList";
 import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { partyTotals, projectedVotes } from "@/lib/pollingUnits/partyTotals";
 import { ArrowLeft } from "lucide-react";
 import type { PollingUnit, TallyRow } from "@/types";
-
-const TRACKED_PARTY = "APM";
 
 export default function RecordingPage() {
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
@@ -23,6 +22,7 @@ export default function RecordingPage() {
   const [lga, setLga] = useState("all");
   const [ward, setWard] = useState("all");
   const [agentId, setAgentId] = useState("all");
+  const [party, setParty] = useState("all");
   const [selected, setSelected] = useState<PollingUnit | undefined>();
 
   useEffect(() => {
@@ -39,6 +39,14 @@ export default function RecordingPage() {
       ignore = true;
     };
   }, [resultsVersion]);
+
+  const parties = useMemo(() => {
+    const combined: Record<string, number> = {};
+    for (const row of puRows ?? []) {
+      for (const [p, v] of Object.entries(row.vote_counts ?? {})) combined[p] = (combined[p] ?? 0) + v;
+    }
+    return partyTotals(combined);
+  }, [puRows]);
 
   const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
   const lgaOptions = useMemo(() => distinctLGAs(allPUs), [allPUs]);
@@ -68,12 +76,12 @@ export default function RecordingPage() {
             name: pu?.pu_name ?? r.key,
             lga: pu?.lga ?? "",
             ward: pu?.ward ?? "",
-            votes: r.vote_counts?.[TRACKED_PARTY] ?? 0,
+            votes: projectedVotes(r.vote_counts, party),
           };
         })
         .filter((p) => p.votes > 0)
         .sort((a, b) => b.votes - a.votes),
-    [puRows, pollingUnitsMap, lga, ward, agentId],
+    [puRows, pollingUnitsMap, lga, ward, agentId, party],
   );
 
   return (
@@ -87,7 +95,7 @@ export default function RecordingPage() {
           Back to collation
         </Link>
         <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">
-          Polling units recording {TRACKED_PARTY} votes
+          Polling units recording {party === "all" ? "" : `${party} `}votes
         </h1>
         <p className="text-sm text-muted-foreground">Tap a polling unit for its full result breakdown.</p>
       </div>
@@ -143,13 +151,28 @@ export default function RecordingPage() {
           </SelectContent>
         </Select>
 
-        {(lga !== "all" || ward !== "all" || agentId !== "all") && (
+        <Select value={party} onValueChange={(v) => setParty(v ?? "all")}>
+          <SelectTrigger className="w-40 rounded-xl">
+            <SelectValue placeholder="All parties">{(v: string) => (v === "all" ? "All parties" : v)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All parties</SelectItem>
+            {parties.map((p) => (
+              <SelectItem key={p.party} value={p.party}>
+                {p.party}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(lga !== "all" || ward !== "all" || agentId !== "all" || party !== "all") && (
           <button
             type="button"
             onClick={() => {
               setLga("all");
               setWard("all");
               setAgentId("all");
+              setParty("all");
             }}
             className="text-xs text-muted-foreground hover:text-foreground hover:underline"
           >

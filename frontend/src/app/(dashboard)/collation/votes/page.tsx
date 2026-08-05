@@ -11,11 +11,10 @@ import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { partyTotals, projectedVotes } from "@/lib/pollingUnits/partyTotals";
 import { ArrowLeft, Search, MessageSquareText } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { PollingUnit, Result } from "@/types";
-
-const TRACKED_PARTY = "APM";
 
 export default function VotesPage() {
   const pollingUnitsMap = useMapStore((s) => s.pollingUnits);
@@ -26,6 +25,7 @@ export default function VotesPage() {
   const [lga, setLga] = useState("all");
   const [ward, setWard] = useState("all");
   const [agentId, setAgentId] = useState("all");
+  const [party, setParty] = useState("all");
   const [selected, setSelected] = useState<PollingUnit | undefined>();
 
   useEffect(() => {
@@ -42,6 +42,14 @@ export default function VotesPage() {
       ignore = true;
     };
   }, [resultsVersion]);
+
+  const parties = useMemo(() => {
+    const combined: Record<string, number> = {};
+    for (const r of results ?? []) {
+      for (const [p, v] of Object.entries(r.vote_counts ?? {})) combined[p] = (combined[p] ?? 0) + v;
+    }
+    return partyTotals(combined);
+  }, [results]);
 
   const allPUs = useMemo(() => Object.values(pollingUnitsMap), [pollingUnitsMap]);
   const lgaOptions = useMemo(() => distinctLGAs(allPUs), [allPUs]);
@@ -83,7 +91,9 @@ export default function VotesPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to collation
         </Link>
-        <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">Where {TRACKED_PARTY} votes came from</h1>
+        <h1 className="mt-2 font-heading text-2xl font-bold tracking-tight">
+          Where {party === "all" ? "" : `${party} `}votes came from
+        </h1>
         <p className="text-sm text-muted-foreground">Every submission, newest first — the place it came from and who reported it.</p>
       </div>
 
@@ -148,7 +158,21 @@ export default function VotesPage() {
           </SelectContent>
         </Select>
 
-        {(query || lga !== "all" || ward !== "all" || agentId !== "all") && (
+        <Select value={party} onValueChange={(v) => setParty(v ?? "all")}>
+          <SelectTrigger className="w-40 rounded-xl">
+            <SelectValue placeholder="All parties">{(v: string) => (v === "all" ? "All parties" : v)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All parties</SelectItem>
+            {parties.map((p) => (
+              <SelectItem key={p.party} value={p.party}>
+                {p.party}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {(query || lga !== "all" || ward !== "all" || agentId !== "all" || party !== "all") && (
           <button
             type="button"
             onClick={() => {
@@ -156,6 +180,7 @@ export default function VotesPage() {
               setLga("all");
               setWard("all");
               setAgentId("all");
+              setParty("all");
             }}
             className="text-xs text-muted-foreground hover:text-foreground hover:underline"
           >
@@ -196,7 +221,7 @@ export default function VotesPage() {
                       </p>
                     </div>
                     <p className="shrink-0 text-sm font-semibold tabular-nums">
-                      {(r.vote_counts?.[TRACKED_PARTY] ?? 0).toLocaleString()}
+                      {projectedVotes(r.vote_counts, party).toLocaleString()}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs dark:border-slate-800">
