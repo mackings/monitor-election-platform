@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useResolvedLocation } from "@/lib/hooks/useResolvedLocation";
 import { checkIn, checkOut } from "@/lib/api/officers";
+import { queueCheckIn, queueCheckOut } from "@/lib/offline/queue";
+import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { cn } from "@/lib/utils";
@@ -26,8 +28,14 @@ export function CheckInButton() {
         await checkOut();
         updateLocalStatus("offline");
         toast.success("Checked out");
-      } catch {
-        toast.error("Couldn't reach the server to check out. Check your connection and try again.");
+      } catch (err) {
+        if (err instanceof ApiError) {
+          toast.error("Couldn't check out — the server rejected it. Try again.");
+        } else {
+          await queueCheckOut();
+          updateLocalStatus("offline");
+          toast.info("No connection — checkout saved and will send automatically once you're back online.");
+        }
       } finally {
         setSubmitting(false);
       }
@@ -49,8 +57,14 @@ export function CheckInButton() {
       await checkIn(lat, lng);
       updateLocalStatus("active");
       toast.success("Checked in — your location has been shared");
-    } catch {
-      toast.error("Couldn't reach the server to check in. Check your connection and try again.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error("Couldn't check in — the server rejected it. Try again.");
+      } else {
+        await queueCheckIn(lat, lng);
+        updateLocalStatus("active");
+        toast.info("No connection — check-in saved and will send automatically once you're back online.");
+      }
     } finally {
       setSubmitting(false);
     }

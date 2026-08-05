@@ -5,8 +5,10 @@ import { ApiError } from "@/lib/api/client";
 import { createIncident, type CreateIncidentInput } from "@/lib/api/incidents";
 import { submitResult, type SubmitResultInput } from "@/lib/api/collation";
 import { uploadFile, type CaptureProof } from "@/lib/api/media";
+import { checkIn, checkOut, updateStatus, triggerDistress } from "@/lib/api/officers";
 import { uuid } from "@/lib/uuid";
 import { toast } from "sonner";
+import type { PUStatus } from "@/types";
 
 // This whole module runs silently by design (a background sync attempt
 // failing shouldn't interrupt the agent with an error every 15 seconds),
@@ -44,7 +46,46 @@ interface QueuedResult {
   input: SubmitResultInput;
 }
 
-export type QueuedSubmission = QueuedIncident | QueuedResult;
+// Check-in/out, a status update, and a distress alert are all short
+// "officer pings" rather than evidence-bearing reports -- no media, no
+// text fields to draft -- but they fail exactly the same way (no
+// connection) and deserve the exact same "saved on this device, will
+// send automatically" treatment instead of just an error toast that
+// loses the agent's action the moment they navigate away.
+interface QueuedCheckIn {
+  id: string;
+  kind: "checkin";
+  createdAt: number;
+  input: { lat: number; lng: number };
+}
+
+interface QueuedCheckOut {
+  id: string;
+  kind: "checkout";
+  createdAt: number;
+}
+
+interface QueuedStatus {
+  id: string;
+  kind: "status";
+  createdAt: number;
+  input: { pu_code: string; status: PUStatus; note?: string };
+}
+
+interface QueuedDistress {
+  id: string;
+  kind: "distress";
+  createdAt: number;
+  input: { pu_code: string; lat: number; lng: number };
+}
+
+export type QueuedSubmission =
+  | QueuedIncident
+  | QueuedResult
+  | QueuedCheckIn
+  | QueuedCheckOut
+  | QueuedStatus
+  | QueuedDistress;
 
 /** A local id prefixed this way is a placeholder for a blob that hasn't
  * uploaded yet -- not a real server-side media id. Used as both the
@@ -85,10 +126,10 @@ export function subscribeSyncing(fn: SyncListener): () => void {
   return () => syncListeners.delete(fn);
 }
 
-/** Every submission's attached media count, for a UI list to show
- * "2 photos" etc. without each page re-deriving it from `input`. */
+/** Attached media count, for a UI list to show "2 photos" etc. without
+ * each page re-deriving it -- only incident/result carry media at all. */
 export function mediaCountOf(item: QueuedSubmission): number {
-  return item.input.media_ids?.length ?? 0;
+  return (item.kind === "incident" || item.kind === "result") ? (item.input.media_ids?.length ?? 0) : 0;
 }
 
 /** The submission queue only, never raw media blobs -- media items are an
@@ -96,10 +137,13 @@ export function mediaCountOf(item: QueuedSubmission): number {
  * something the "N pending" badge needs to count separately (see
  * flushQueue: a submission never sits queued-but-fully-resolved, since
  * handleSubmit routes straight to the queue whenever it references
- * unresolved media, live-network-blip or not). */
+ * unresolved media, live-network-blip or not). Sorted oldest-first --
+ * IndexedDB's key order (a random uuid) has no relationship to when
+ * something was actually queued, and replaying a check-in/out or status
+ * sequence out of order could leave the server in the wrong end state. */
 async function getSubmissionQueue(): Promise<QueuedSubmission[]> {
   const all = await idbGetAll<QueuedSubmission | QueuedMedia>();
-  return all.filter((i): i is QueuedSubmission => i.kind !== "media");
+  return all.filter((i): i is QueuedSubmission => i.kind !== "media").sort((a, b) => a.createdAt - b.createdAt);
 }
 
 async function notify() {
@@ -151,6 +195,36 @@ export async function queueIncident(input: CreateIncidentInput): Promise<void> {
 
 export async function queueResult(input: SubmitResultInput): Promise<void> {
   await idbPut<QueuedResult>({ id: uuid(), kind: "result", createdAt: Date.now(), input });
+  await notify();
+}
+
+export async function queueCheckIn(lat: number, lng: number): Promise<void> {
+  await idbPut<QueuedCheckIn>({ id: uuid(), kind: "checkin", createdAt: Date.now(), input: { lat, lng } });
+  await notify();
+}
+
+export async function queueCheckOut(): Promise<void> {
+  await idbPut<QueuedCheckOut>({ id: uuid(), kind: "checkout", createdAt: Date.now() });
+  await notify();
+}
+
+export async function queueStatus(puCode: string, status: PUStatus, note?: string): Promise<void> {
+  await idbPut<QueuedStatus>({
+    id: uuid(),
+    kind: "status",
+    createdAt: Date.now(),
+    input: { pu_code: puCode, status, note },
+  });
+  await notify();
+}
+
+export async function queueDistress(puCode: string, lat: number, lng: number): Promise<void> {
+  await idbPut<QueuedDistress>({
+    id: uuid(),
+    kind: "distress",
+    createdAt: Date.now(),
+    input: { pu_code: puCode, lat, lng },
+  });
   await notify();
 }
 
@@ -241,12 +315,48 @@ function hasUnresolvedMedia(ids: string[] | undefined): boolean {
 
 let flushing = false;
 
+/** Sends one item -- for incident/result, `item.input.media_ids` must
+ * already be patched with resolved real ids by the caller before this is
+ * called. Throws on failure, same as the underlying API call, so the
+ * caller's existing retriable/session-expired/permanent handling applies
+ * uniformly to every kind without repeating it six times. */
+async function sendOne(item: QueuedSubmission): Promise<void> {
+  switch (item.kind) {
+    case "incident":
+      await createIncident(item.input);
+      return;
+    case "result":
+      await submitResult(item.input);
+      return;
+    case "checkin":
+      await checkIn(item.input.lat, item.input.lng);
+      return;
+    case "checkout":
+      await checkOut();
+      return;
+    case "status":
+      await updateStatus(item.input.pu_code, item.input.status, item.input.note);
+      return;
+    case "distress":
+      await triggerDistress(item.input.pu_code, item.input.lat, item.input.lng);
+      return;
+  }
+}
+
 /** Resolves any pending media blobs first, patches the results into
  * whatever queued incidents/results referenced them, then replays
- * submissions in order -- stopping at the first one that still can't go
- * (a genuine network failure, or it still references media that hasn't
- * finished uploading) and leaving it and everything behind it queued for
- * next time, rather than reordering or dropping anything. */
+ * everything in strict chronological order -- this matters beyond just
+ * "fairness": check-in/check-out/distress all set the same
+ * officer.status field, so replaying them out of order could leave the
+ * server showing a stale state (e.g. a checkout that happened before a
+ * distress alert must not be allowed to land after it and overwrite it
+ * back to "offline"). A genuine send failure (network/session/server)
+ * still stops the whole pass there, since if that failed, nothing behind
+ * it will succeed either. The one thing that does NOT stop the pass is
+ * an incident/result still waiting on its own media upload -- that's
+ * skipped (not abandoned; it stays queued) so it can never hold up an
+ * unrelated, unblocked item queued after it, most importantly a distress
+ * alert stuck behind someone else's slow photo. */
 export async function flushQueue(): Promise<void> {
   if (flushing) {
     log("flush already in progress, skipping this trigger");
@@ -267,17 +377,23 @@ export async function flushQueue(): Promise<void> {
     if (sessionExpired) return;
     const queue = await getSubmissionQueue();
     for (const item of queue) {
-      const input = { ...item.input, media_ids: replaceMediaIds(item.input.media_ids, resolved) };
-      if (hasUnresolvedMedia(input.media_ids)) {
-        log(`${item.kind} ${item.id} still references unresolved media, stopping this pass`);
-        break;
+      // For incident/result, patch in whatever media just got resolved
+      // above before sending -- and if sending still fails for a
+      // retriable reason, persist that patched version so the next flush
+      // doesn't need resolvePendingMedia to re-supply an id whose
+      // QueuedMedia record is already gone (deleted the moment it
+      // uploaded successfully).
+      let toSend: QueuedSubmission = item;
+      if (item.kind === "incident" || item.kind === "result") {
+        const mediaIds = replaceMediaIds(item.input.media_ids, resolved);
+        if (hasUnresolvedMedia(mediaIds)) {
+          log(`${item.kind} ${item.id} still references unresolved media, skipping for now (not blocking the rest)`);
+          continue;
+        }
+        toSend = { ...item, input: { ...item.input, media_ids: mediaIds } } as QueuedSubmission;
       }
       try {
-        if (item.kind === "incident") {
-          await createIncident(input as CreateIncidentInput);
-        } else {
-          await submitResult(input as SubmitResultInput);
-        }
+        await sendOne(toSend);
         await idbDelete(item.id);
         syncedCount++;
         log(`synced ${item.kind} ${item.id}`);
@@ -288,9 +404,7 @@ export async function flushQueue(): Promise<void> {
         }
         if (isRetriable(err)) {
           log(`${item.kind} ${item.id} still can't send, leaving queued:`, err);
-          // Persist the patched media_ids so next flush doesn't have to
-          // re-resolve ids that already succeeded.
-          await idbPut({ ...item, input });
+          if (toSend !== item) await idbPut(toSend);
           break;
         }
         // A real validation rejection: drop it rather than retry forever,

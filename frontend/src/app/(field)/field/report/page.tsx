@@ -151,7 +151,7 @@ export default function IncidentReportPage() {
         </div>
       </div>
 
-      <PendingSubmissionsList kind="incident" />
+      <PendingSubmissionsList kinds={["incident"]} />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

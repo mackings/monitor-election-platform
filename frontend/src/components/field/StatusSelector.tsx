@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { updateStatus } from "@/lib/api/officers";
+import { queueStatus } from "@/lib/offline/queue";
+import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { toast } from "sonner";
 import type { PUStatus } from "@/types";
@@ -58,8 +60,14 @@ export function StatusSelector() {
       await updateStatus(puCode, status);
       setCurrent(status);
       toast.success("Sent to the dashboard");
-    } catch {
-      toast.error("Couldn't send. Try again.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error("Couldn't send — the server rejected it. Try again.");
+      } else {
+        await queueStatus(puCode, status);
+        setCurrent(status);
+        toast.info("No connection — saved on this device and will send automatically once you're back online.");
+      }
     } finally {
       setSubmitting(null);
     }

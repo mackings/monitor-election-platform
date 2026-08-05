@@ -180,7 +180,7 @@ export default function ResultEntryPage() {
         </div>
       </div>
 
-      <PendingSubmissionsList kind="result" />
+      <PendingSubmissionsList kinds={["result"]} />
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

@@ -5,6 +5,7 @@ import { StatusSelector } from "@/components/field/StatusSelector";
 import { DistressButton } from "@/components/field/DistressButton";
 import { CopyableField } from "@/components/field/CopyableField";
 import { InstallAppBanner } from "@/components/field/InstallAppBanner";
+import { PendingSubmissionsList } from "@/components/field/PendingSubmissionsList";
 import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,8 @@ export default function FieldHomePage() {
   return (
     <div className="space-y-5">
       <InstallAppBanner />
+
+      <PendingSubmissionsList kinds={["checkin", "checkout", "status", "distress"]} />
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-100 to-slate-50 p-3.5 shadow-sm dark:border-slate-800 dark:from-slate-900 dark:to-slate-950">
         <div className="flex items-center justify-between">

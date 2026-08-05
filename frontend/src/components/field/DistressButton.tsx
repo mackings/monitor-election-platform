@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/dialog";
 import { useResolvedLocation } from "@/lib/hooks/useResolvedLocation";
 import { triggerDistress } from "@/lib/api/officers";
+import { queueDistress } from "@/lib/offline/queue";
+import { ApiError } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useAssignedPU } from "@/components/field/AssignedPUContext";
 import { toast } from "sonner";
@@ -44,8 +46,24 @@ export function DistressButton() {
       updateLocalStatus("distress");
       toast.success("Distress alert sent — supervisors have been notified");
       setOpen(false);
-    } catch {
-      toast.error("Couldn't reach the server to send the alert. Check your connection and try again.");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        toast.error("Couldn't reach the server to send the alert. Check your connection and try again.");
+      } else {
+        // Deliberately not the same "saved, will send automatically" info
+        // toast the other queued actions get -- for an alert this urgent,
+        // implying help is on its way when nobody has actually been
+        // notified yet would be actively dangerous. This has to be
+        // unambiguous that nothing has gone out, and point to a real
+        // fallback (call/text directly) rather than just "try again."
+        await queueDistress(puCode, lat, lng);
+        updateLocalStatus("distress");
+        toast.error(
+          "No connection — supervisors have NOT been notified yet. This will send automatically the instant you're back online. If you need help now, call your supervisor directly.",
+          { duration: 12000 },
+        );
+        setOpen(false);
+      }
     } finally {
       setSending(false);
     }
