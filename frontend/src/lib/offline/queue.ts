@@ -343,20 +343,33 @@ async function sendOne(item: QueuedSubmission): Promise<void> {
   }
 }
 
+/** Items in the same group must replay in strict relative order (a
+ * failure stops the REST OF THAT GROUP for this pass), but different
+ * groups are entirely independent of each other. Check-in/check-out/
+ * distress all write the officer's own `status` field, so those three
+ * share a group -- replaying them out of order could leave the server
+ * showing a stale state (e.g. a checkout that happened before a distress
+ * alert must not be allowed to land after it and overwrite it back to
+ * "offline"). Every other kind is independent of every other kind (a
+ * result submission has no relationship to an incident report, or to a
+ * PU status update), so each gets its own group. This is what stops one
+ * page's stuck item -- a large photo upload timing out on Report, say --
+ * from silently blocking an unrelated queued action from Home or
+ * Results in the same pass, which otherwise reads as "sync works
+ * standalone but not when multiple pages have something queued at once." */
+function conflictGroupOf(kind: QueuedSubmission["kind"]): string {
+  return kind === "checkin" || kind === "checkout" || kind === "distress" ? "officer-status" : kind;
+}
+
 /** Resolves any pending media blobs first, patches the results into
- * whatever queued incidents/results referenced them, then replays
- * everything in strict chronological order -- this matters beyond just
- * "fairness": check-in/check-out/distress all set the same
- * officer.status field, so replaying them out of order could leave the
- * server showing a stale state (e.g. a checkout that happened before a
- * distress alert must not be allowed to land after it and overwrite it
- * back to "offline"). A genuine send failure (network/session/server)
- * still stops the whole pass there, since if that failed, nothing behind
- * it will succeed either. The one thing that does NOT stop the pass is
- * an incident/result still waiting on its own media upload -- that's
- * skipped (not abandoned; it stays queued) so it can never hold up an
- * unrelated, unblocked item queued after it, most importantly a distress
- * alert stuck behind someone else's slow photo. */
+ * whatever queued incidents/results referenced them, then replays each
+ * conflict group (see conflictGroupOf) independently and in strict
+ * chronological order within itself -- a failure stops the rest of
+ * *that* group for this pass, but never affects any other group. The one
+ * thing that does NOT stop even its own group is an incident/result
+ * still waiting on its own media upload -- that's skipped (not
+ * abandoned; it stays queued) so a slow photo can't hold up a
+ * chronologically-later item in the same group either. */
 export async function flushQueue(): Promise<void> {
   if (flushing) {
     log("flush already in progress, skipping this trigger");
@@ -376,42 +389,54 @@ export async function flushQueue(): Promise<void> {
     const { resolved, sessionExpired } = await resolvePendingMedia();
     if (sessionExpired) return;
     const queue = await getSubmissionQueue();
+    const groups = new Map<string, QueuedSubmission[]>();
     for (const item of queue) {
-      // For incident/result, patch in whatever media just got resolved
-      // above before sending -- and if sending still fails for a
-      // retriable reason, persist that patched version so the next flush
-      // doesn't need resolvePendingMedia to re-supply an id whose
-      // QueuedMedia record is already gone (deleted the moment it
-      // uploaded successfully).
-      let toSend: QueuedSubmission = item;
-      if (item.kind === "incident" || item.kind === "result") {
-        const mediaIds = replaceMediaIds(item.input.media_ids, resolved);
-        if (hasUnresolvedMedia(mediaIds)) {
-          log(`${item.kind} ${item.id} still references unresolved media, skipping for now (not blocking the rest)`);
-          continue;
+      const g = conflictGroupOf(item.kind);
+      const list = groups.get(g);
+      if (list) list.push(item);
+      else groups.set(g, [item]);
+    }
+
+    groupLoop: for (const [groupName, groupItems] of groups) {
+      for (const item of groupItems) {
+        // For incident/result, patch in whatever media just got resolved
+        // above before sending -- and if sending still fails for a
+        // retriable reason, persist that patched version so the next
+        // flush doesn't need resolvePendingMedia to re-supply an id
+        // whose QueuedMedia record is already gone (deleted the moment
+        // it uploaded successfully).
+        let toSend: QueuedSubmission = item;
+        if (item.kind === "incident" || item.kind === "result") {
+          const mediaIds = replaceMediaIds(item.input.media_ids, resolved);
+          if (hasUnresolvedMedia(mediaIds)) {
+            log(`${item.kind} ${item.id} still references unresolved media, skipping for now (not blocking the rest)`);
+            continue;
+          }
+          toSend = { ...item, input: { ...item.input, media_ids: mediaIds } } as QueuedSubmission;
         }
-        toSend = { ...item, input: { ...item.input, media_ids: mediaIds } } as QueuedSubmission;
-      }
-      try {
-        await sendOne(toSend);
-        await idbDelete(item.id);
-        syncedCount++;
-        log(`synced ${item.kind} ${item.id}`);
-      } catch (err) {
-        if (isSessionExpired(err)) {
-          log(`${item.kind} ${item.id} hit a 401 -- session expired, stopping this flush pass`);
-          break;
+        try {
+          await sendOne(toSend);
+          await idbDelete(item.id);
+          syncedCount++;
+          log(`synced ${item.kind} ${item.id}`);
+        } catch (err) {
+          if (isSessionExpired(err)) {
+            log(`${item.kind} ${item.id} hit a 401 -- session expired, stopping the whole flush pass`);
+            break groupLoop;
+          }
+          if (isRetriable(err)) {
+            log(`${item.kind} ${item.id} still can't send, leaving queued (group "${groupName}" stops here this pass):`, err);
+            if (toSend !== item) await idbPut(toSend);
+            continue groupLoop;
+          }
+          // A real validation rejection: drop it rather than retry
+          // forever, but don't silently lose it -- surface it as failed
+          // so the agent knows to redo it manually. Stays in this same
+          // group's loop since dropping a bad item shouldn't stop its
+          // still-good successors.
+          log(`${item.kind} ${item.id} permanently rejected, dropping:`, err);
+          await idbDelete(item.id);
         }
-        if (isRetriable(err)) {
-          log(`${item.kind} ${item.id} still can't send, leaving queued:`, err);
-          if (toSend !== item) await idbPut(toSend);
-          break;
-        }
-        // A real validation rejection: drop it rather than retry forever,
-        // but don't silently lose it -- surface it as failed so the
-        // agent knows to redo it manually.
-        log(`${item.kind} ${item.id} permanently rejected, dropping:`, err);
-        await idbDelete(item.id);
       }
     }
   } catch (err) {
