@@ -21,6 +21,7 @@ import {
 import { Pagination } from "@/components/dashboard/Pagination";
 import { PUDetailSheet } from "@/components/dashboard/PUDetailSheet";
 import { PU_STATUS_COLOR, PU_STATUS_LABEL } from "@/components/map/statusColors";
+import { cn } from "@/lib/utils";
 import { Search, X, LocateFixed, Loader2, ListFilter, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import type { PollingUnit, PUStatus } from "@/types";
@@ -44,6 +45,20 @@ const STATUS_PRIORITY: Record<PUStatus, number> = {
   no_report: 4,
   completed: 5,
 };
+
+// A coarser view on top of the full status multi-select: "has voting
+// actually gotten underway at this PU" is the first thing an admin
+// wants to triage, well before drilling into which of the 6 exact
+// statuses applies. `no_report` counts as "not started" -- no agent has
+// filed anything yet, so there's no evidence voting has begun there.
+const NOT_STARTED_STATUSES: PUStatus[] = ["not_open", "no_report"];
+const STARTED_STATUSES: PUStatus[] = ["voting", "incident", "distress", "completed"];
+
+type VotingQuickFilter = "all" | "not_started" | "started";
+
+function sameStatusSet(a: Set<PUStatus>, b: PUStatus[]): boolean {
+  return a.size === b.length && b.every((s) => a.has(s));
+}
 
 const SORT_OPTIONS = [
   { value: "name", label: "Name (A–Z)" },
@@ -177,6 +192,17 @@ export default function PollingUnitsPage() {
     setPage(1);
   }
 
+  const votingQuickFilter: VotingQuickFilter = sameStatusSet(statuses, STARTED_STATUSES)
+    ? "started"
+    : sameStatusSet(statuses, NOT_STARTED_STATUSES)
+      ? "not_started"
+      : "all";
+
+  function setVotingQuickFilter(v: VotingQuickFilter) {
+    setStatuses(v === "all" ? new Set() : new Set(v === "started" ? STARTED_STATUSES : NOT_STARTED_STATUSES));
+    setPage(1);
+  }
+
   async function handleLocateMe() {
     try {
       const { lat, lng, approximate } = await locate({ timeoutMs: 15000 });
@@ -289,6 +315,30 @@ export default function PollingUnitsPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <div className="flex items-center rounded-xl border border-slate-200 p-0.5 dark:border-slate-800">
+          {(
+            [
+              { value: "all", label: "All" },
+              { value: "not_started", label: "Not started" },
+              { value: "started", label: "Voting started" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setVotingQuickFilter(opt.value)}
+              className={cn(
+                "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                votingQuickFilter === opt.value
+                  ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                  : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger
