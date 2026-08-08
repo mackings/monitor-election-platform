@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -171,6 +172,54 @@ func (h *OfficerHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func (h *OfficerHandler) SetDisabled(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Disabled bool `json:"disabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if err := h.officer.SetDisabled(r.Context(), id, body.Disabled); err != nil {
+		if err == domain.ErrNotFound {
+			httpresp.Error(w, http.StatusNotFound, "officer not found")
+			return
+		}
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+// SelfAssign lets a field officer claim a polling unit that has no primary
+// agent yet -- the counterpart to Assign (admin-driven) for accounts that
+// were bulk-created with no PU on purpose (see auth.Usecase.
+// QuickAssignBatch).
+func (h *OfficerHandler) SelfAssign(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PUCode string `json:"pu_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	officerID := middleware.UserID(r.Context())
+	if err := h.officer.SelfAssignPU(r.Context(), officerID, body.PUCode); err != nil {
+		if errors.Is(err, domain.ErrConflict) {
+			httpresp.Error(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrNotFound) {
+			httpresp.Error(w, http.StatusNotFound, "polling unit not found")
+			return
+		}
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusOK, map[string]string{"status": "assigned"})
 }
 
 func (h *OfficerHandler) Distress(w http.ResponseWriter, r *http.Request) {

@@ -46,6 +46,12 @@ func (u *Usecase) Login(ctx context.Context, username, password string) (*LoginR
 	if !hash.Check(user.PasswordHash, password) {
 		return nil, domain.ErrUnauthorized
 	}
+	// Checked after the password, not before -- a disabled account with a
+	// correctly-typed password gets the specific "deactivated" message,
+	// while a wrong password never confirms an account exists at all.
+	if user.Disabled {
+		return nil, domain.ErrAccountDisabled
+	}
 	token, err := u.tokens.Generate(user.ID, string(user.Role))
 	if err != nil {
 		return nil, err
@@ -175,6 +181,85 @@ func (u *Usecase) BulkCreateOfficers(ctx context.Context, rows []CreateOfficerIn
 		}
 	}
 	return results
+}
+
+const maxQuickAssignBatch = 200
+
+type QuickAssignResult struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+// QuickAssignBatch bulk-creates field officer accounts with no polling
+// unit assigned on purpose: rather than an admin hand-assigning each one
+// individually (the CreateOfficer/BulkCreateOfficers path), agents pick
+// their own PU the first time they open the field app (see officer.
+// Usecase.SelfAssignPU). Every account in a batch shares the one
+// admin-typed password -- only the generated username tells them apart --
+// so the admin can hand out a whole batch as a single printed/exported
+// sheet rather than one credential pair at a time.
+func (u *Usecase) QuickAssignBatch(ctx context.Context, count int, password string) ([]QuickAssignResult, error) {
+	if count < 1 || count > maxQuickAssignBatch {
+		return nil, fmt.Errorf("%w: count must be between 1 and %d", domain.ErrInvalidInput, maxQuickAssignBatch)
+	}
+	if len(password) < 8 {
+		return nil, fmt.Errorf("%w: password must be at least 8 characters", domain.ErrInvalidInput)
+	}
+	pwHash, err := hash.Hash(password)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]QuickAssignResult, 0, count)
+	for i := 1; i <= count; i++ {
+		username, err := u.uniqueQuickAssignUsername(ctx, i)
+		if err != nil {
+			return nil, err
+		}
+		user := &domain.User{
+			Name:         username,
+			Username:     username,
+			PasswordHash: pwHash,
+			Role:         domain.RoleFieldOfficer,
+		}
+		if err := u.users.Create(ctx, user); err != nil {
+			return nil, err
+		}
+		results = append(results, QuickAssignResult{Username: username, Password: password})
+	}
+	return results, nil
+}
+
+// uniqueQuickAssignUsername generates "useragentN<xx>" (N = this account's
+// sequential position in the batch, xx = a 2-letter random suffix) and
+// retries with a fresh suffix on the rare chance it collides with a
+// username from an earlier batch -- N alone repeats every batch (1..count
+// again each time), so the suffix is what keeps usernames globally unique.
+func (u *Usecase) uniqueQuickAssignUsername(ctx context.Context, n int) (string, error) {
+	for attempt := 0; attempt < 5; attempt++ {
+		suffix, err := randomLowerAlpha(2)
+		if err != nil {
+			return "", err
+		}
+		username := fmt.Sprintf("useragent%d%s", n, suffix)
+		if _, err := u.users.FindByUsername(ctx, username); errors.Is(err, domain.ErrNotFound) {
+			return username, nil
+		}
+	}
+	return "", fmt.Errorf("could not generate a unique username after several attempts")
+}
+
+func randomLowerAlpha(n int) (string, error) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz"
+	b := make([]byte, n)
+	for i := range b {
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(alphabet))))
+		if err != nil {
+			return "", err
+		}
+		b[i] = alphabet[idx.Int64()]
+	}
+	return string(b), nil
 }
 
 type SignupInput struct {

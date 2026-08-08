@@ -15,9 +15,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EditOfficerDialog } from "@/components/dashboard/EditOfficerDialog";
-import { deleteOfficer } from "@/lib/api/officers";
+import { deleteOfficer, setOfficerDisabled, unassignOfficer } from "@/lib/api/officers";
 import type { PollingUnit, User } from "@/types";
-import { Phone, Pencil, Trash2 } from "lucide-react";
+import { Phone, Pencil, Trash2, UserMinus, Ban, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const AgentLiveMap = dynamic(() => import("./AgentLiveMap").then((m) => m.AgentLiveMap), {
@@ -53,7 +53,10 @@ interface AgentDetailSheetProps {
 export function AgentDetailSheet({ officer, assignedPU, onOpenChange, onChanged }: AgentDetailSheetProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [unassigning, setUnassigning] = useState(false);
+  const [togglingDisabled, setTogglingDisabled] = useState(false);
 
   async function handleDelete() {
     if (!officer) return;
@@ -68,6 +71,36 @@ export function AgentDetailSheet({ officer, assignedPU, onOpenChange, onChanged 
       toast.error("Couldn't remove this agent. Try again.");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleUnassign() {
+    if (!officer) return;
+    setUnassigning(true);
+    try {
+      await unassignOfficer(officer.id);
+      toast.success(`${officer.name} unassigned from their polling unit.`);
+      onChanged?.();
+    } catch {
+      toast.error("Couldn't unassign this agent. Try again.");
+    } finally {
+      setUnassigning(false);
+    }
+  }
+
+  async function handleToggleDisabled() {
+    if (!officer) return;
+    const nextDisabled = !officer.disabled;
+    setTogglingDisabled(true);
+    try {
+      await setOfficerDisabled(officer.id, nextDisabled);
+      toast.success(nextDisabled ? `${officer.name} deactivated — they can no longer log in.` : `${officer.name} reactivated.`);
+      setConfirmDeactivateOpen(false);
+      onChanged?.();
+    } catch {
+      toast.error("Couldn't update this agent. Try again.");
+    } finally {
+      setTogglingDisabled(false);
     }
   }
 
@@ -86,6 +119,14 @@ export function AgentDetailSheet({ officer, assignedPU, onOpenChange, onChanged 
                 <div className="min-w-0 flex-1">
                   <SheetTitle className="truncate">{officer.name}</SheetTitle>
                   <SheetDescription className="truncate">{officer.username}</SheetDescription>
+                  {officer.disabled && (
+                    <Badge
+                      variant="secondary"
+                      className="mt-1 bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                    >
+                      Deactivated
+                    </Badge>
+                  )}
                 </div>
                 <Badge variant="secondary" className={`shrink-0 ${STATUS_VARIANT[officer.status]}`}>
                   {officer.status}
@@ -125,10 +166,34 @@ export function AgentDetailSheet({ officer, assignedPU, onOpenChange, onChanged 
 
               <div className="text-sm">
                 <p className="text-muted-foreground">Assigned polling unit</p>
-                <p className="font-medium">
-                  {assignedPU?.pu_name ?? officer.assigned_pu_code ?? "Unassigned"}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">
+                    {assignedPU?.pu_name ?? officer.assigned_pu_code ?? "Unassigned"}
+                  </p>
+                  {officer.assigned_pu_code && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 gap-1.5 text-muted-foreground"
+                      onClick={handleUnassign}
+                      disabled={unassigning}
+                    >
+                      <UserMinus className="h-3.5 w-3.5" />
+                      {unassigning ? "Unassigning…" : "Unassign"}
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => (officer.disabled ? handleToggleDisabled() : setConfirmDeactivateOpen(true))}
+                disabled={togglingDisabled}
+              >
+                {officer.disabled ? <UserCheck className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                {togglingDisabled ? "Updating…" : officer.disabled ? "Reactivate agent" : "Deactivate agent"}
+              </Button>
             </div>
           </>
         )}
@@ -140,6 +205,26 @@ export function AgentDetailSheet({ officer, assignedPU, onOpenChange, onChanged 
         onOpenChange={setEditOpen}
         onUpdated={() => onChanged?.()}
       />
+
+      <Dialog open={confirmDeactivateOpen} onOpenChange={setConfirmDeactivateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate {officer?.name}?</DialogTitle>
+            <DialogDescription>
+              They won&apos;t be able to log in until you reactivate them. Their account, history, and polling unit
+              assignment are all kept as-is — this doesn&apos;t delete anything.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeactivateOpen(false)} disabled={togglingDisabled}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleToggleDisabled} disabled={togglingDisabled}>
+              {togglingDisabled ? "Deactivating…" : "Deactivate agent"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <DialogContent>

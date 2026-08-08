@@ -38,7 +38,12 @@ type User struct {
 	Status         OfficerStatus `bson:"status" json:"status"`
 	LastLocation   *Location     `bson:"last_location,omitempty" json:"last_location,omitempty"`
 	LastSeenAt     *time.Time    `bson:"last_seen_at,omitempty" json:"last_seen_at,omitempty"`
-	CreatedAt      time.Time     `bson:"created_at" json:"created_at"`
+	// Disabled blocks login without deleting the account or its history --
+	// zero-value false (the natural default for every account created
+	// before this field existed) means "not disabled," so adding this
+	// never silently locks out existing users.
+	Disabled  bool      `bson:"disabled,omitempty" json:"disabled,omitempty"`
+	CreatedAt time.Time `bson:"created_at" json:"created_at"`
 }
 
 // UserPatch is a partial update -- a nil field is left untouched. Only the
@@ -70,6 +75,10 @@ type UserRepository interface {
 	// ~25s while an officer is checked in) can never accidentally revert a
 	// distress/offline transition that raced it.
 	UpdateLocation(ctx context.Context, userID string, loc Location) error
+	// SetDisabled blocks (or restores) login for an account without
+	// touching anything else -- the account, its history, and its PU
+	// assignment all stay exactly as they were.
+	SetDisabled(ctx context.Context, userID string, disabled bool) error
 	UpdatePassword(ctx context.Context, userID, newPasswordHash string) error
 	// SetResetToken/FindByResetToken/ResetPassword back the forgot-password
 	// flow. The token and its expiry are stored only on the Mongo document

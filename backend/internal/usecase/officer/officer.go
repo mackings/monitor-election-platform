@@ -2,6 +2,7 @@ package officer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"monitor/backend/internal/domain"
@@ -160,6 +161,39 @@ func (u *Usecase) UpdateLocation(ctx context.Context, officerID string, loc doma
 
 func (u *Usecase) List(ctx context.Context) ([]*domain.User, error) {
 	return u.users.List(ctx, domain.RoleFieldOfficer)
+}
+
+// SetDisabled blocks (or restores) an officer's ability to log in, without
+// touching their account, history, or PU assignment -- distinct from
+// Delete, which removes the account outright.
+func (u *Usecase) SetDisabled(ctx context.Context, officerID string, disabled bool) error {
+	return u.users.SetDisabled(ctx, officerID, disabled)
+}
+
+// SelfAssignPU lets a field officer claim their own polling-unit
+// assignment the first time they open the app -- see auth.Usecase.
+// QuickAssignBatch, which deliberately creates accounts with no PU so
+// agents pick their own instead of an admin hand-assigning each one.
+// Only succeeds while the officer has no assignment yet, onto a PU with
+// no primary agent yet; AssignOfficerIfUnassigned is conditional at the
+// DB level so two agents racing for the same still-open PU can't both
+// win it.
+func (u *Usecase) SelfAssignPU(ctx context.Context, officerID, puCode string) error {
+	officer, err := u.users.FindByID(ctx, officerID)
+	if err != nil {
+		return err
+	}
+	if officer.AssignedPUCode != "" {
+		return fmt.Errorf("%w: you're already assigned to a polling unit", domain.ErrConflict)
+	}
+	claimed, err := u.pus.AssignOfficerIfUnassigned(ctx, puCode, officerID)
+	if err != nil {
+		return err
+	}
+	if !claimed {
+		return fmt.Errorf("%w: this polling unit was just taken by another agent", domain.ErrConflict)
+	}
+	return u.users.UpdateAssignment(ctx, officerID, puCode)
 }
 
 // clearOldPrimaryIfOwned clears a PU's back-reference to officerID only if

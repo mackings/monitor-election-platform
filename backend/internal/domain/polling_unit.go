@@ -35,6 +35,12 @@ type PollingUnitRepository interface {
 	List(ctx context.Context, lga, ward string) ([]*PollingUnit, error)
 	FindByCode(ctx context.Context, code string) (*PollingUnit, error)
 	AssignOfficer(ctx context.Context, code, officerID string) error
+	// AssignOfficerIfUnassigned is AssignOfficer's conditional cousin --
+	// used for a field officer self-picking a PU (see officer.Usecase.
+	// SelfAssignPU), where two agents racing for the same newly-available
+	// PU must never both win. Returns false (not an error) when the PU
+	// already has a different officer assigned.
+	AssignOfficerIfUnassigned(ctx context.Context, code, officerID string) (bool, error)
 	UpdateStatus(ctx context.Context, code string, status PUStatus) error
 	CountByStatus(ctx context.Context) (map[PUStatus]int, error)
 }

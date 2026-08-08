@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreateOfficerDialog } from "@/components/dashboard/CreateOfficerDialog";
 import { BulkImportOfficersDialog } from "@/components/dashboard/BulkImportOfficersDialog";
+import { QuickAssignDialog } from "@/components/dashboard/QuickAssignDialog";
 import { AgentDetailSheet } from "@/components/dashboard/AgentDetailSheet";
 import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
 import type { OfficerStatus, User } from "@/types";
@@ -77,6 +78,7 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <QuickAssignDialog onCreated={() => listOfficers().then(setOfficers)} />
           <BulkImportOfficersDialog onImported={() => listOfficers().then(setOfficers)} />
           <CreateOfficerDialog onCreated={() => listOfficers().then(setOfficers)} />
         </div>
@@ -184,9 +186,19 @@ export default function AgentsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary" className={STATUS_VARIANT[officer.status]}>
-                        {officer.status}
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="secondary" className={STATUS_VARIANT[officer.status]}>
+                          {officer.status}
+                        </Badge>
+                        {officer.disabled && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                          >
+                            Deactivated
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {officer.last_seen_at ? new Date(officer.last_seen_at).toLocaleString() : "Never"}

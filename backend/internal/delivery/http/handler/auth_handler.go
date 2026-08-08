@@ -30,6 +30,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.auth.Login(r.Context(), body.Username, body.Password)
 	if err != nil {
+		if errors.Is(err, domain.ErrAccountDisabled) {
+			httpresp.Error(w, http.StatusForbidden, "this account has been deactivated. Contact your admin.")
+			return
+		}
 		httpresp.Error(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
@@ -122,6 +126,27 @@ func (h *AuthHandler) BulkCreateOfficers(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	httpresp.JSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+func (h *AuthHandler) QuickAssign(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Count    int    `json:"count"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httpresp.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	results, err := h.auth.QuickAssignBatch(r.Context(), body.Count, body.Password)
+	if err != nil {
+		if errors.Is(err, domain.ErrInvalidInput) {
+			httpresp.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		httpresp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	httpresp.JSON(w, http.StatusCreated, map[string]any{"results": results})
 }
 
 func (h *AuthHandler) Signup(w http.ResponseWriter, r *http.Request) {

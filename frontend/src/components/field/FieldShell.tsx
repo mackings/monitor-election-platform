@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AssignedPUProvider, useAssignedPU } from "@/components/field/AssignedPUContext";
+import { PickPollingUnitSheet } from "@/components/field/PickPollingUnitSheet";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { useLocationPing } from "@/lib/hooks/useLocationPing";
 import { OfflineQueueBadge } from "@/components/field/OfflineQueueBadge";
@@ -144,6 +145,7 @@ export function FieldShell({ children }: { children: React.ReactNode }) {
           </main>
           <FloatingBottomNav pathname={pathname} />
         </div>
+        <PickPollingUnitSheet />
       </AssignedPUProvider>
     </AuthGuard>
   );

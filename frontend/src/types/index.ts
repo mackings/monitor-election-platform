@@ -28,6 +28,7 @@ export interface User {
   status: OfficerStatus;
   last_location?: Location;
   last_seen_at?: string;
+  disabled?: boolean;
   created_at: string;
 }
 

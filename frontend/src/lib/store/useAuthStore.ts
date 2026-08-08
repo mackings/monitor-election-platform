@@ -9,6 +9,7 @@ interface AuthState {
   hydrated: boolean;
   setSession: (token: string, user: User) => void;
   updateLocalStatus: (status: OfficerStatus) => void;
+  updateAssignedPU: (puCode: string) => void;
   logout: () => void;
   hydrate: () => void;
 }
@@ -28,6 +29,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user } = get();
     if (!user) return;
     const updated = { ...user, status };
+    if (typeof window !== "undefined") {
+      localStorage.setItem("monitor_user", JSON.stringify(updated));
+    }
+    set({ user: updated });
+  },
+  updateAssignedPU: (puCode) => {
+    const { user } = get();
+    if (!user) return;
+    const updated = { ...user, assigned_pu_code: puCode };
     if (typeof window !== "undefined") {
       localStorage.setItem("monitor_user", JSON.stringify(updated));
     }

@@ -59,6 +59,19 @@ export function bulkCreateOfficers(rows: CreateOfficerInput[]) {
   return api.post<{ results: BulkOfficerRowResult[] }>("/api/v1/officers/bulk", { rows });
 }
 
+export interface QuickAssignResult {
+  username: string;
+  password: string;
+}
+
+/** Bulk-creates `count` field officer accounts sharing one admin-typed
+ * password, all with no polling unit assigned on purpose -- agents pick
+ * their own the first time they open the field app (see the "self-assign"
+ * PU picker) instead of an admin hand-assigning each one. */
+export function quickAssignOfficers(count: number, password: string) {
+  return api.post<{ results: QuickAssignResult[] }>("/api/v1/officers/quick-assign", { count, password });
+}
+
 export function changePassword(currentPassword: string, newPassword: string) {
   return api.post<{ status: string }>("/api/v1/auth/change-password", {
     current_password: currentPassword,

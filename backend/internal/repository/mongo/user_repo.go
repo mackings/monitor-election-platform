@@ -23,6 +23,7 @@ type userDoc struct {
 	Status              domain.OfficerStatus `bson:"status"`
 	LastLocation        *domain.Location     `bson:"last_location,omitempty"`
 	LastSeenAt          *time.Time           `bson:"last_seen_at,omitempty"`
+	Disabled            bool                 `bson:"disabled,omitempty"`
 	CreatedAt           time.Time            `bson:"created_at"`
 	ResetToken          string               `bson:"reset_token,omitempty"`
 	ResetTokenExpiresAt *time.Time           `bson:"reset_token_expires_at,omitempty"`
@@ -41,6 +42,7 @@ func (d *userDoc) toDomain() *domain.User {
 		Status:         d.Status,
 		LastLocation:   d.LastLocation,
 		LastSeenAt:     d.LastSeenAt,
+		Disabled:       d.Disabled,
 		CreatedAt:      d.CreatedAt,
 	}
 }
@@ -250,6 +252,21 @@ func (r *UserRepository) UpdateStatus(ctx context.Context, userID string, status
 	}
 	_, err = r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": set})
 	return err
+}
+
+func (r *UserRepository) SetDisabled(ctx context.Context, userID string, disabled bool) error {
+	oid, err := bson.ObjectIDFromHex(userID)
+	if err != nil {
+		return domain.ErrNotFound
+	}
+	res, err := r.col.UpdateOne(ctx, bson.M{"_id": oid}, bson.M{"$set": bson.M{"disabled": disabled}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
 }
 
 func (r *UserRepository) UpdateLocation(ctx context.Context, userID string, loc domain.Location) error {

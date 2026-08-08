@@ -136,6 +136,48 @@ func (r *Repository) AssignOfficer(ctx context.Context, code, officerID string) 
 	return err
 }
 
+// AssignOfficerIfUnassigned claims a PU for officerID only if nobody else
+// already holds it -- see domain.PollingUnitRepository for why this needs
+// to be conditional at the DB level rather than a fetch-then-write in the
+// usecase (which would let two agents racing for the same freshly
+// unassigned PU both believe they'd won it).
+func (r *Repository) AssignOfficerIfUnassigned(ctx context.Context, code, officerID string) (bool, error) {
+	if _, ok := r.static[code]; !ok {
+		return false, domain.ErrNotFound
+	}
+
+	// Case 1: a state doc already exists for this PU and has no officer on
+	// it yet -- claim it in place.
+	err := r.col.FindOneAndUpdate(ctx,
+		bson.M{"_id": code, "$or": []bson.M{
+			{"assigned_officer_id": bson.M{"$exists": false}},
+			{"assigned_officer_id": ""},
+		}},
+		bson.M{"$set": bson.M{"assigned_officer_id": officerID, "updated_at": time.Now()}},
+	).Err()
+	if err == nil {
+		return true, nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return false, err
+	}
+
+	// No doc matched that filter -- either this PU has genuinely never
+	// been touched (no state doc at all, so inserting one claims it), or
+	// a doc exists and is already assigned to someone else. InsertOne's
+	// own duplicate-key error on _id is what tells those two cases apart,
+	// since a plain Find here would otherwise race the same way a
+	// fetch-then-write in the usecase would.
+	_, err = r.col.InsertOne(ctx, stateDoc{PUCode: code, AssignedOfficerID: officerID, UpdatedAt: time.Now()})
+	if mongo.IsDuplicateKeyError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *Repository) UpdateStatus(ctx context.Context, code string, status domain.PUStatus) error {
 	if _, ok := r.static[code]; !ok {
 		return domain.ErrNotFound

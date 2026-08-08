@@ -38,6 +38,20 @@ export function deleteOfficer(officerId: string) {
   return api.delete<{ status: string }>(`/api/v1/officers/${officerId}`);
 }
 
+/** Blocks (or restores) an officer's ability to log in without deleting
+ * their account, history, or PU assignment -- distinct from deleteOfficer,
+ * which removes the account outright. */
+export function setOfficerDisabled(officerId: string, disabled: boolean) {
+  return api.post<{ status: string }>(`/api/v1/officers/${officerId}/disable`, { disabled });
+}
+
+/** Field-officer-only: claims a polling unit that has no primary agent
+ * yet. The counterpart to the admin-driven assignOfficer, for accounts
+ * that were Quick-Assign-generated with no PU on purpose. */
+export function selfAssignPU(puCode: string) {
+  return api.post<{ status: string }>("/api/v1/officer/self-assign", { pu_code: puCode });
+}
+
 export function checkIn(lat: number, lng: number) {
   return api.post("/api/v1/officer/checkin", { lat, lng });
 }
