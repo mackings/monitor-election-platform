@@ -10,8 +10,10 @@ import type {
   DistressPayload,
   Incident,
   OfficerLocationPayload,
+  OfficerPUChangedPayload,
   OfficerStatusPayload,
   StatusEvent,
+  User,
   WSEvent,
 } from "@/types";
 
@@ -22,6 +24,8 @@ export function useLiveEvents() {
   const updatePUStatus = useMapStore((s) => s.updatePUStatus);
   const updateOfficerStatus = useMapStore((s) => s.updateOfficerStatus);
   const updateOfficerLocation = useMapStore((s) => s.updateOfficerLocation);
+  const addOfficer = useMapStore((s) => s.addOfficer);
+  const assignOfficerToPU = useMapStore((s) => s.assignOfficerToPU);
   const addIncident = useIncidentStore((s) => s.addIncident);
   const pushFeedItem = useIncidentStore((s) => s.pushFeedItem);
   const bumpResultsVersion = useCollationStore((s) => s.bumpResultsVersion);
@@ -45,6 +49,15 @@ export function useLiveEvents() {
         case "officer.location_updated": {
           const p = evt.payload as OfficerLocationPayload;
           updateOfficerLocation(p.officer_id, p.location, p.at);
+          break;
+        }
+        case "officer.created": {
+          addOfficer(evt.payload as User);
+          break;
+        }
+        case "officer.pu_changed": {
+          const p = evt.payload as OfficerPUChangedPayload;
+          assignOfficerToPU(p.officer_id, p.pu_code);
           break;
         }
         case "incident.created": {
@@ -81,5 +94,14 @@ export function useLiveEvents() {
       unsubscribe();
       liveSocket.disconnect();
     };
-  }, [updatePUStatus, updateOfficerStatus, updateOfficerLocation, addIncident, pushFeedItem, bumpResultsVersion]);
+  }, [
+    updatePUStatus,
+    updateOfficerStatus,
+    updateOfficerLocation,
+    addOfficer,
+    assignOfficerToPU,
+    addIncident,
+    pushFeedItem,
+    bumpResultsVersion,
+  ]);
 }

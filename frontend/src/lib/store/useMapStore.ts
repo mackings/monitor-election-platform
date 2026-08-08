@@ -6,6 +6,7 @@ interface MapState {
   officers: Record<string, User>;
   setPollingUnits: (pus: PollingUnit[]) => void;
   setOfficers: (officers: User[]) => void;
+  addOfficer: (officer: User) => void;
   updatePUStatus: (puCode: string, status: PUStatus) => void;
   updateOfficerStatus: (officerId: string, status: OfficerStatus, location?: Location) => void;
   updateOfficerLocation: (officerId: string, location: Location, at: string) => void;
@@ -20,6 +21,13 @@ export const useMapStore = create<MapState>((set) => ({
     set({ pollingUnits: Object.fromEntries((pus ?? []).map((pu) => [pu.pu_code, pu])) }),
   setOfficers: (officers) =>
     set({ officers: Object.fromEntries((officers ?? []).map((o) => [o.id, o])) }),
+  // Live counterpart to setOfficers' initial load -- an officer created
+  // through any channel (single add, bulk import, Quick Assign) while an
+  // admin's Agents/Polling Units page is already open otherwise never
+  // appears there until a manual refresh, since account creation has no
+  // other way to reach an already-mounted page.
+  addOfficer: (officer) =>
+    set((state) => ({ officers: { ...state.officers, [officer.id]: officer } })),
   updatePUStatus: (puCode, status) =>
     set((state) => {
       const existing = state.pollingUnits[puCode];

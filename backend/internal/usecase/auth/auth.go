@@ -19,15 +19,28 @@ import (
 const resetTokenTTL = time.Hour
 
 type Usecase struct {
-	users  domain.UserRepository
-	pus    domain.PollingUnitRepository
-	mailer domain.Mailer
-	tokens *jwtutil.Manager
-	appURL string
+	users       domain.UserRepository
+	pus         domain.PollingUnitRepository
+	mailer      domain.Mailer
+	tokens      *jwtutil.Manager
+	appURL      string
+	broadcaster domain.Broadcaster
 }
 
-func New(users domain.UserRepository, pus domain.PollingUnitRepository, mailer domain.Mailer, tokens *jwtutil.Manager, appURL string) *Usecase {
-	return &Usecase{users: users, pus: pus, mailer: mailer, tokens: tokens, appURL: appURL}
+func New(users domain.UserRepository, pus domain.PollingUnitRepository, mailer domain.Mailer, tokens *jwtutil.Manager, appURL string, broadcaster domain.Broadcaster) *Usecase {
+	return &Usecase{users: users, pus: pus, mailer: mailer, tokens: tokens, appURL: appURL, broadcaster: broadcaster}
+}
+
+// publishOfficerCreated tells any already-open admin dashboard a new
+// officer exists without waiting for that page's own refetch -- account
+// creation (single add, bulk import, Quick Assign) otherwise has no live
+// signal at all, unlike every other officer action.
+func (u *Usecase) publishOfficerCreated(user *domain.User) {
+	u.broadcaster.Publish(domain.Event{
+		Type:      domain.EventOfficerCreated,
+		OfficerID: user.ID,
+		Payload:   user,
+	})
 }
 
 type LoginResult struct {
@@ -142,6 +155,7 @@ func (u *Usecase) CreateOfficer(ctx context.Context, in CreateOfficerInput) (*Cr
 		}
 	}
 
+	u.publishOfficerCreated(user)
 	return &CreateOfficerResult{User: user, Username: username, Password: password, EmailSent: emailSent}, nil
 }
 
@@ -225,6 +239,7 @@ func (u *Usecase) QuickAssignBatch(ctx context.Context, count int, password stri
 		if err := u.users.Create(ctx, user); err != nil {
 			return nil, err
 		}
+		u.publishOfficerCreated(user)
 		results = append(results, QuickAssignResult{Username: username, Password: password})
 	}
 	return results, nil

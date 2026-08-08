@@ -193,7 +193,25 @@ func (u *Usecase) SelfAssignPU(ctx context.Context, officerID, puCode string) er
 	if !claimed {
 		return fmt.Errorf("%w: this polling unit was just taken by another agent", domain.ErrConflict)
 	}
-	return u.users.UpdateAssignment(ctx, officerID, puCode)
+	if err := u.users.UpdateAssignment(ctx, officerID, puCode); err != nil {
+		return err
+	}
+	// The acting admin's UI isn't the one making this request -- it's the
+	// field officer's -- so nothing updates the admin dashboard's view of
+	// this PU/officer without an explicit broadcast, unlike admin-driven
+	// assignment (which the admin's own page updates locally right away).
+	u.broadcaster.Publish(domain.Event{
+		Type:      domain.EventOfficerPUChanged,
+		PUCode:    puCode,
+		OfficerID: officerID,
+		Payload:   officerPUChangedPayload{OfficerID: officerID, PUCode: puCode},
+	})
+	return nil
+}
+
+type officerPUChangedPayload struct {
+	OfficerID string `json:"officer_id"`
+	PUCode    string `json:"pu_code"`
 }
 
 // clearOldPrimaryIfOwned clears a PU's back-reference to officerID only if

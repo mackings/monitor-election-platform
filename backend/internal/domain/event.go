@@ -8,10 +8,21 @@ const (
 	EventOfficerCheckedIn       EventType = "officer.checked_in"
 	EventOfficerCheckedOut      EventType = "officer.checked_out"
 	EventOfficerLocationUpdated EventType = "officer.location_updated"
-	EventPUStatusChanged        EventType = "pu.status_changed"
-	EventIncidentCreated        EventType = "incident.created"
-	EventDistressTriggered      EventType = "distress.triggered"
-	EventResultSubmitted        EventType = "result.submitted"
+	// EventOfficerCreated fires once per new officer account (single add,
+	// bulk CSV import, or Quick Assign) so an admin's already-open Agents
+	// page picks it up without a manual refresh -- account creation
+	// otherwise has no live signal at all, unlike every other officer
+	// action here.
+	EventOfficerCreated EventType = "officer.created"
+	// EventOfficerPUChanged fires when an officer's PU assignment changes
+	// via a path the acting admin's own UI doesn't already update
+	// optimistically -- today that's just self-assignment from the field
+	// app (see officer.Usecase.SelfAssignPU).
+	EventOfficerPUChanged  EventType = "officer.pu_changed"
+	EventPUStatusChanged   EventType = "pu.status_changed"
+	EventIncidentCreated   EventType = "incident.created"
+	EventDistressTriggered EventType = "distress.triggered"
+	EventResultSubmitted   EventType = "result.submitted"
 )
 
 // Event is the payload broadcast to connected WS clients. Usecases build

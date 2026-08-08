@@ -86,7 +86,7 @@ func main() {
 	broadcaster := broadcast.NewPersisting(hub, activityRepo)
 	tokens := jwtutil.NewManager(cfg.JWTSecret, cfg.JWTTTL)
 
-	authUC := auth.New(userRepo, puRepo, mail, tokens, cfg.AppURL)
+	authUC := auth.New(userRepo, puRepo, mail, tokens, cfg.AppURL, broadcaster)
 	officerUC := officer.New(userRepo, puRepo, statusEventRepo, broadcaster, hub)
 	puUC := pollingunit.New(puRepo)
 	incidentUC := incident.New(incidentRepo, puRepo, broadcaster)
