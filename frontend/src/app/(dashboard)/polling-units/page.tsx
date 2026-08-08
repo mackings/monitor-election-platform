@@ -5,6 +5,7 @@ import { useMapStore } from "@/lib/store/useMapStore";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useApproximateLocation } from "@/lib/hooks/useApproximateLocation";
 import { distinctLGAs, distinctWards } from "@/lib/pollingUnits/filterOptions";
+import { matchesPollingUnitQuery } from "@/lib/search/normalizeSearch";
 import { haversineKm } from "@/lib/geo/distance";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -66,16 +67,6 @@ const SORT_OPTIONS = [
 ] as const;
 type SortOption = (typeof SORT_OPTIONS)[number]["value"];
 
-function matchesQuery(pu: PollingUnit, query: string): boolean {
-  return (
-    pu.pu_name.toLowerCase().includes(query) ||
-    pu.ward.toLowerCase().includes(query) ||
-    pu.lga.toLowerCase().includes(query) ||
-    pu.pu_code.toLowerCase().includes(query) ||
-    (pu.yardcode ?? "").toLowerCase().includes(query)
-  );
-}
-
 /** Reads/writes filter state to the URL query string (via the raw History
  * API, not Next's router -- this is purely for shareable/bookmarkable
  * filtered views, not real navigation, so it shouldn't trigger Next's
@@ -136,7 +127,7 @@ export default function PollingUnitsPage() {
       if (statuses.size > 0 && !statuses.has(pu.current_status)) return false;
       if (assignment === "assigned" && !pu.assigned_officer_id) return false;
       if (assignment === "unassigned" && pu.assigned_officer_id) return false;
-      if (q && !matchesQuery(pu, q)) return false;
+      if (q && !matchesPollingUnitQuery(pu, q)) return false;
       return true;
     });
   }, [pollingUnits, lga, ward, statuses, assignment, debouncedQuery]);

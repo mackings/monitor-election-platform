@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api/client";
 import { useGeolocation } from "@/lib/hooks/useGeolocation";
 import { useAuthStore } from "@/lib/store/useAuthStore";
 import { haversineKm, formatDistanceKm } from "@/lib/geo/distance";
+import { normalizeSearch } from "@/lib/search/normalizeSearch";
 import type { PollingUnit } from "@/types";
 import { Search, Loader2, LocateFixed } from "lucide-react";
 import { toast } from "sonner";
@@ -87,13 +88,17 @@ export function PickPollingUnitSheet() {
   const searchResults = useMemo((): Row[] => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
+    // Name/ward/LGA are hyphenated inconsistently in the source data
+    // ("OKE-ADO" vs "Oke Ado") -- matched on a hyphen-insensitive
+    // normalized query so it doesn't matter which way someone types it.
+    const nq = normalizeSearch(query);
     return unassigned
       .filter(
         (pu) =>
-          pu.pu_name.toLowerCase().includes(q) ||
+          normalizeSearch(pu.pu_name).includes(nq) ||
           pu.pu_code.toLowerCase().includes(q) ||
-          pu.ward.toLowerCase().includes(q) ||
-          pu.lga.toLowerCase().includes(q),
+          normalizeSearch(pu.ward).includes(nq) ||
+          normalizeSearch(pu.lga).includes(nq),
       )
       .slice(0, SEARCH_LIMIT)
       .map((pu) => ({ pu }));

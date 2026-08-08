@@ -6,6 +6,7 @@ import { useMapStore } from "@/lib/store/useMapStore";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useApproximateLocation } from "@/lib/hooks/useApproximateLocation";
 import { haversineKm } from "@/lib/geo/distance";
+import { matchesPollingUnitQuery } from "@/lib/search/normalizeSearch";
 import { StatTile } from "@/components/dashboard/StatTile";
 import { LiveActivityFeed } from "@/components/dashboard/LiveActivityFeed";
 import { AgentStatusPanel } from "@/components/dashboard/AgentStatusPanel";
@@ -26,16 +27,6 @@ const NEAR_ME_COUNT = 20;
 // "your location." Generous enough to cover anywhere in/near Oyo State,
 // tight enough to catch "resolved to Lagos" (~130km from central Oyo).
 const MAX_NEAR_ME_KM = 60;
-
-function matchesQuery(pu: PollingUnit, query: string): boolean {
-  return (
-    pu.pu_name.toLowerCase().includes(query) ||
-    pu.ward.toLowerCase().includes(query) ||
-    pu.lga.toLowerCase().includes(query) ||
-    pu.pu_code.toLowerCase().includes(query) ||
-    (pu.yardcode ?? "").toLowerCase().includes(query)
-  );
-}
 
 const OyoMap = dynamic(() => import("@/components/map/OyoMap").then((m) => m.OyoMap), {
   ssr: false,
@@ -66,7 +57,7 @@ export default function DashboardOverviewPage() {
   const searchMatches = useMemo(() => {
     const q = debouncedQuery.trim().toLowerCase();
     if (!q) return [];
-    return pollingUnits.filter((pu) => matchesQuery(pu, q));
+    return pollingUnits.filter((pu) => matchesPollingUnitQuery(pu, q));
   }, [pollingUnits, debouncedQuery]);
 
   const isSearching = debouncedQuery.trim().length > 0;
