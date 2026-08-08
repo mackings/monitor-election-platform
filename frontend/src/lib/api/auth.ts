@@ -10,20 +10,6 @@ export function login(username: string, password: string) {
   return api.post<LoginResult>("/api/v1/auth/login", { username, password });
 }
 
-export interface SignupInput {
-  name: string;
-  phone: string;
-  email?: string;
-  username: string;
-  password: string;
-}
-
-// Public self-registration — always creates a field_officer account.
-// Returns the same shape as login() so the caller can reuse setSession.
-export function signup(input: SignupInput) {
-  return api.post<LoginResult>("/api/v1/auth/signup", input);
-}
-
 export interface CreateOfficerInput {
   name: string;
   phone: string;
