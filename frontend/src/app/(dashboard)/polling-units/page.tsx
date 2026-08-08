@@ -34,26 +34,39 @@ const PAGE_SIZE = 50;
 // from a point that could be a hundred-plus km off.
 const MAX_NEAR_ME_KM = 60;
 
-const STATUS_OPTIONS: PUStatus[] = ["not_open", "voting", "incident", "distress", "completed", "no_report"];
+const STATUS_OPTIONS: PUStatus[] = [
+  "not_open",
+  "accrediting",
+  "voting",
+  "incident",
+  "distress",
+  "completed",
+  "counting",
+  "no_report",
+];
 
 // Distress/incident first regardless of alphabetical order -- these are
-// what an admin sorting "by priority" actually wants surfaced.
+// what an admin sorting "by priority" actually wants surfaced. The three
+// "something is actively happening right now" stages come next, in their
+// natural chronological order.
 const STATUS_PRIORITY: Record<PUStatus, number> = {
   distress: 0,
   incident: 1,
-  voting: 2,
-  not_open: 3,
-  no_report: 4,
-  completed: 5,
+  accrediting: 2,
+  voting: 3,
+  counting: 4,
+  not_open: 5,
+  no_report: 6,
+  completed: 7,
 };
 
-// A coarser view on top of the full status multi-select: "has voting
-// actually gotten underway at this PU" is the first thing an admin
-// wants to triage, well before drilling into which of the 6 exact
+// A coarser view on top of the full status multi-select: "has the polling
+// day actually gotten underway at this PU" is the first thing an admin
+// wants to triage, well before drilling into which of the 8 exact
 // statuses applies. `no_report` counts as "not started" -- no agent has
-// filed anything yet, so there's no evidence voting has begun there.
+// filed anything yet, so there's no evidence anything has begun there.
 const NOT_STARTED_STATUSES: PUStatus[] = ["not_open", "no_report"];
-const STARTED_STATUSES: PUStatus[] = ["voting", "incident", "distress", "completed"];
+const STARTED_STATUSES: PUStatus[] = ["accrediting", "voting", "incident", "distress", "completed", "counting"];
 
 type VotingQuickFilter = "all" | "not_started" | "started";
 

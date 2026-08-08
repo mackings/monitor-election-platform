@@ -4,10 +4,12 @@ export type OfficerStatus = "offline" | "active" | "distress";
 
 export type PUStatus =
   | "not_open"
+  | "accrediting"
   | "voting"
   | "incident"
   | "distress"
   | "completed"
+  | "counting"
   | "no_report";
 
 export type Severity = "low" | "medium" | "high" | "critical";
@@ -125,6 +127,8 @@ export type WSEventType =
   | "officer.checked_in"
   | "officer.checked_out"
   | "officer.location_updated"
+  | "officer.created"
+  | "officer.pu_changed"
   | "pu.status_changed"
   | "incident.created"
   | "distress.triggered"
@@ -156,4 +160,9 @@ export interface OfficerLocationPayload {
   location: Location;
   distance_km?: number;
   at: string;
+}
+
+export interface OfficerPUChangedPayload {
+  officer_id: string;
+  pu_code: string;
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { CheckInButton } from "@/components/field/CheckInButton";
-import { StatusSelector } from "@/components/field/StatusSelector";
+import { DayFlow } from "@/components/field/DayFlow";
 import { DistressButton } from "@/components/field/DistressButton";
 import { CopyableField } from "@/components/field/CopyableField";
 import { InstallAppBanner } from "@/components/field/InstallAppBanner";
@@ -51,18 +50,9 @@ export default function FieldHomePage() {
             </p>
           </div>
         )}
-
-        <div className="mt-2.5">
-          <CheckInButton />
-        </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-          What&apos;s happening at your polling unit?
-        </h2>
-        <StatusSelector />
-      </div>
+      <DayFlow />
 
       <DistressButton />
     </div>

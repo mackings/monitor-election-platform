@@ -8,12 +8,14 @@ import (
 type PUStatus string
 
 const (
-	PUNotOpen  PUStatus = "not_open"
-	PUVoting   PUStatus = "voting"
-	PUIncident PUStatus = "incident"
-	PUDistress PUStatus = "distress"
-	PUComplete PUStatus = "completed"
-	PUNoReport PUStatus = "no_report"
+	PUNotOpen     PUStatus = "not_open"
+	PUAccrediting PUStatus = "accrediting"
+	PUVoting      PUStatus = "voting"
+	PUIncident    PUStatus = "incident"
+	PUDistress    PUStatus = "distress"
+	PUComplete    PUStatus = "completed"
+	PUCounting    PUStatus = "counting"
+	PUNoReport    PUStatus = "no_report"
 )
 
 type PollingUnit struct {
